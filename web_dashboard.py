@@ -8,8 +8,9 @@ import sys
 import os
 import argparse
 
-# Add src to path
-sys.path.insert(0, '/home/user/Trading-App')
+# Add project root to path (works both locally and on Render)
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
 
 from src.web.app import run_dashboard
 from src.core.config import Config
