@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}System Logs - Wolf Market Analyzer{% endblock %}
+
+{% block content %}
+<div class="dashboard-header mb-3">
+    <h1>📜 System Logs</h1>
+    <p class="card-subtitle">Real-time application logs and error tracking</p>
+</div>
+
+<!-- Controls -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">Controls</h2>
+        <div style="display: flex; gap: 1rem;">
+            <button class="btn btn-primary" onclick="refreshLogs()">🔄 Refresh</button>
+            <button class="btn" onclick="toggleAutoRefresh()">
+                <span id="auto-refresh-status">▶️ Enable Auto-Refresh</span>
+            </button>
+            <select id="line-count" class="btn" onchange="refreshLogs()">
+                <option value="100">Last 100 lines</option>
+                <option value="200" selected>Last 200 lines</option>
+                <option value="500">Last 500 lines</option>
+                <option value="1000">Last 1000 lines</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Log Display -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">📋 Log Output</h2>
+        <span class="stat-change" style="font-size: 0.875rem;">{{ log_file }}</span>
+    </div>
+    <div id="log-container" style="background: #000; color: #0f0; padding: 1rem; font-family: 'Courier New', monospace; font-size: 0.875rem; max-height: 80vh; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">
+        {% if log_lines %}
+            {% for line in log_lines %}{{ line }}{% endfor %}
+        {% else %}
+            <span style="color: #888;">No logs available</span>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+/* Custom scrollbar for log container */
+#log-container::-webkit-scrollbar {
+    width: 10px;
+}
+
+#log-container::-webkit-scrollbar-track {
+    background: #1a1a2e;
+}
+
+#log-container::-webkit-scrollbar-thumb {
+    background: #16213e;
+    border-radius: 5px;
+}
+
+#log-container::-webkit-scrollbar-thumb:hover {
+    background: #0f4c75;
+}
+
+/* Log level colors */
+#log-container {
+    line-height: 1.4;
+}
+</style>
+
+<script>
+let autoRefreshInterval = null;
+
+async function refreshLogs() {
+    const count = document.getElementById('line-count').value;
+    const container = document.getElementById('log-container');
+
+    try {
+        const response = await fetch(`/api/logs?count=${count}`);
+        const data = await response.json();
+
+        if (data.success) {
+            // Colorize log levels
+            let logs = data.logs;
+            logs = logs.replace(/ERROR/g, '<span style="color: #ff5555; font-weight: bold;">ERROR</span>');
+            logs = logs.replace(/WARNING/g, '<span style="color: #ffb86c; font-weight: bold;">WARNING</span>');
+            logs = logs.replace(/INFO/g, '<span style="color: #50fa7b;">INFO</span>');
+
+            container.innerHTML = logs || '<span style="color: #888;">No logs available</span>';
+
+            // Auto-scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        } else {
+            container.innerHTML = `<span style="color: #ff5555;">Error: ${data.error}</span>`;
+        }
+    } catch (error) {
+        console.error('Error fetching logs:', error);
+        container.innerHTML = `<span style="color: #ff5555;">Failed to load logs: ${error.message}</span>`;
+    }
+}
+
+function toggleAutoRefresh() {
+    const statusEl = document.getElementById('auto-refresh-status');
+
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        statusEl.textContent = '▶️ Enable Auto-Refresh';
+    } else {
+        autoRefreshInterval = setInterval(refreshLogs, 5000);
+        statusEl.textContent = '⏸️ Disable Auto-Refresh';
+        refreshLogs(); // Immediate refresh
+    }
+}
+
+// Scroll to bottom on load
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('log-container');
+    container.scrollTop = container.scrollHeight;
+
+    // Colorize existing logs
+    let html = container.innerHTML;
+    html = html.replace(/ERROR/g, '<span style="color: #ff5555; font-weight: bold;">ERROR</span>');
+    html = html.replace(/WARNING/g, '<span style="color: #ffb86c; font-weight: bold;">WARNING</span>');
+    html = html.replace(/INFO/g, '<span style="color: #50fa7b;">INFO</span>');
+    container.innerHTML = html;
+});
+</script>
+{% endblock %}

@@ -12,6 +12,8 @@ import traceback
 from collections import deque
 import io
 import base64
+import logging
+from logging.handlers import RotatingFileHandler
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for Render
 import matplotlib.pyplot as plt
@@ -26,11 +28,62 @@ from wolf_analyzer.analysis.pattern_recognition import PatternRecognition
 from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
 from wolf_analyzer.ai.claude_analyzer import ClaudeAnalyzer
 
+# Setup logging
+logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
+# Create logger
+logger = logging.getLogger('wolf_analyzer')
+logger.setLevel(logging.INFO)
+
+# File handler with rotation (10MB max, keep 3 backups)
+log_file = os.path.join(logs_dir, 'wolf_analyzer.log')
+file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)
+file_handler.setLevel(logging.INFO)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Formatter
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Add handlers
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+logger.info("="*80)
+logger.info("Wolf Market Analyzer Starting")
+logger.info("="*80)
+
 app = Flask(__name__)
 CORS(app)
 
-# Debug system - store last 50 errors
+# Debug system - store last 50 errors and 200 general logs
 error_log = deque(maxlen=50)
+activity_log = deque(maxlen=200)
+
+def log_activity(message, level='INFO'):
+    """Log general activity"""
+    activity_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'level': level,
+        'message': message
+    }
+    activity_log.append(activity_entry)
+
+    # Also log to file
+    if level == 'INFO':
+        logger.info(message)
+    elif level == 'WARNING':
+        logger.warning(message)
+    elif level == 'ERROR':
+        logger.error(message)
 
 def log_error(error, context=""):
     """Log error to debug system"""
@@ -42,6 +95,18 @@ def log_error(error, context=""):
         'traceback': traceback.format_exc()
     }
     error_log.append(error_entry)
+
+    # Also log to file and activity log
+    error_msg = f"ERROR [{context}]: {error}"
+    logger.error(error_msg)
+    logger.error(traceback.format_exc())
+
+    activity_log.append({
+        'timestamp': datetime.now().isoformat(),
+        'level': 'ERROR',
+        'message': f"{context}: {str(error)}"
+    })
+
     print(f"ERROR [{context}]: {error}")
     print(traceback.format_exc())
 
@@ -95,6 +160,7 @@ def api_status():
 @app.route('/api/watchlist')
 def api_watchlist():
     """Get watchlist overview"""
+    log_activity("Fetching watchlist data")
     watchlist = Config.get_watchlist()
     overview = []
 
@@ -129,11 +195,14 @@ def api_watchlist():
 
 @app.route('/api/debug')
 def api_debug():
-    """Debug endpoint - show recent errors"""
+    """Debug endpoint - show recent errors and activity"""
     return jsonify({
         'success': True,
         'errors': list(error_log),
         'total_errors': len(error_log),
+        'activity': list(activity_log),
+        'total_activity': len(activity_log),
+        'log_file': log_file,
         'components': {
             'market_data': market_data is not None,
             'pattern_recognition': pattern_recognition is not None,
@@ -143,18 +212,64 @@ def api_debug():
     })
 
 
+@app.route('/logs')
+def view_logs():
+    """View recent logs from file"""
+    try:
+        # Read last 500 lines from log file
+        lines = []
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                lines = f.readlines()
+                # Get last 500 lines
+                lines = lines[-500:]
+
+        return render_template('logs.html', log_lines=lines, log_file=log_file)
+    except Exception as e:
+        log_error(e, "view_logs")
+        return f"Error reading logs: {str(e)}", 500
+
+
+@app.route('/api/logs')
+def api_logs():
+    """API endpoint for logs (last N lines)"""
+    try:
+        count = int(request.args.get('count', 200))
+        count = min(count, 1000)  # Max 1000 lines
+
+        lines = []
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                lines = f.readlines()
+                lines = lines[-count:]
+
+        return jsonify({
+            'success': True,
+            'log_file': log_file,
+            'line_count': len(lines),
+            'logs': ''.join(lines)
+        })
+    except Exception as e:
+        log_error(e, "api_logs")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+
 @app.route('/api/analyze/<path:symbol>')
 def api_analyze(symbol):
     """Analyze specific symbol"""
     try:
+        timeframe = request.args.get('timeframe', '4h')
+        log_activity(f"Analyzing {symbol} ({timeframe})")
+
         if not market_data:
             raise Exception("MarketDataConnector not initialized")
         if not indicators:
             raise Exception("TechnicalIndicators not initialized")
         if not pattern_recognition:
             raise Exception("PatternRecognition not initialized")
-
-        timeframe = request.args.get('timeframe', '4h')
 
         # Fetch data
         df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=200)
@@ -233,14 +348,15 @@ def api_analyze(symbol):
 def api_chart(symbol):
     """Generate chart image for symbol"""
     try:
+        timeframe = request.args.get('timeframe', '4h')
+        log_activity(f"Generating chart for {symbol} ({timeframe})")
+
         if not market_data:
             raise Exception("MarketDataConnector not initialized")
         if not indicators:
             raise Exception("TechnicalIndicators not initialized")
         if not pattern_recognition:
             raise Exception("PatternRecognition not initialized")
-
-        timeframe = request.args.get('timeframe', '4h')
 
         # Fetch data
         df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=100)
