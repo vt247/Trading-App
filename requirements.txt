@@ -9,10 +9,9 @@ pandas==2.1.4
 numpy==1.26.3
 
 # Chart Analysis & Technical Indicators
-mplfinance==0.12.10b0
-matplotlib==3.8.2
-ta==0.11.0
-pandas-ta==0.3.14b0
+mplfinance
+matplotlib>=3.8.0
+ta>=0.11.0
 
 # AI Integration
 anthropic==0.18.1
