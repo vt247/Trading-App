@@ -11,7 +11,17 @@ setup(
     version="1.0.0",
     description="AI-powered trading analysis using FOOS4 methodology",
     author="Wolf Trading Team",
-    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*"]),
+    packages=[
+        'wolf_analyzer',
+        'wolf_analyzer.ai',
+        'wolf_analyzer.analysis',
+        'wolf_analyzer.core',
+        'wolf_analyzer.data',
+        'wolf_analyzer.database',
+        'wolf_analyzer.web',
+        'wolf_analyzer.notifications',
+        'wolf_analyzer.journal',
+    ],
     python_requires=">=3.11",
     install_requires=[
         # Core Dependencies
