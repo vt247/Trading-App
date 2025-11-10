@@ -30,6 +30,19 @@
     </div>
 </div>
 
+<!-- Price Chart -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">📊 Price Chart</h2>
+    </div>
+    <div id="chart-container" style="text-align: center; padding: 1rem;">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading chart...</p>
+        </div>
+    </div>
+</div>
+
 <!-- Technical Indicators -->
 <div class="card mb-3">
     <div class="card-header">
@@ -66,6 +79,7 @@ async function loadAnalysis() {
     showLoading('price-info');
     showLoading('indicators-container');
     showLoading('patterns-container');
+    showLoading('chart-container');
 
     try {
         const response = await fetch(`/api/analyze/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
@@ -75,6 +89,7 @@ async function loadAnalysis() {
             showError('price-info', data.error);
             showError('indicators-container', data.error);
             showError('patterns-container', data.error);
+            showError('chart-container', data.error);
             return;
         }
 
@@ -87,11 +102,35 @@ async function loadAnalysis() {
         // Display patterns
         displayPatterns(data.patterns);
 
+        // Load chart
+        loadChart(timeframe);
+
     } catch (error) {
         console.error('Analysis error:', error);
         showError('price-info', error.message);
         showError('indicators-container', error.message);
         showError('patterns-container', error.message);
+        showError('chart-container', error.message);
+    }
+}
+
+async function loadChart(timeframe) {
+    try {
+        const response = await fetch(`/api/chart/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+        const data = await response.json();
+
+        if (!data.success) {
+            showError('chart-container', data.error);
+            return;
+        }
+
+        // Display chart image
+        const container = document.getElementById('chart-container');
+        container.innerHTML = `<img src="${data.image}" alt="Price Chart" style="max-width: 100%; height: auto; border-radius: 8px;">`;
+
+    } catch (error) {
+        console.error('Chart error:', error);
+        showError('chart-container', error.message);
     }
 }
 

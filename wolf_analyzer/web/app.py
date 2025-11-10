@@ -3,13 +3,19 @@ Wolf Market Analyzer - Web Dashboard
 Flask-based web interface for market analysis
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_file
 from flask_cors import CORS
 from datetime import datetime
 import sys
 import os
 import traceback
 from collections import deque
+import io
+import base64
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for Render
+import matplotlib.pyplot as plt
+import mplfinance as mpf
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -216,6 +222,106 @@ def api_analyze(symbol):
 
     except Exception as e:
         log_error(e, f"api_analyze({symbol})")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'type': type(e).__name__
+        }), 500
+
+
+@app.route('/api/chart/<path:symbol>')
+def api_chart(symbol):
+    """Generate chart image for symbol"""
+    try:
+        if not market_data:
+            raise Exception("MarketDataConnector not initialized")
+        if not indicators:
+            raise Exception("TechnicalIndicators not initialized")
+        if not pattern_recognition:
+            raise Exception("PatternRecognition not initialized")
+
+        timeframe = request.args.get('timeframe', '4h')
+
+        # Fetch data
+        df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=100)
+
+        if df.empty:
+            return jsonify({'success': False, 'error': 'No data available'}), 404
+
+        # Calculate indicators for chart
+        support, resistance = indicators.calculate_support_resistance(df)
+        patterns = pattern_recognition.analyze_chart(df, symbol)
+
+        # Create chart style
+        mc = mpf.make_marketcolors(
+            up='#26a69a',
+            down='#ef5350',
+            edge='inherit',
+            wick='inherit',
+            volume='in',
+            alpha=0.9
+        )
+
+        s = mpf.make_mpf_style(
+            marketcolors=mc,
+            gridstyle='',
+            y_on_right=False,
+            facecolor='#1a1a2e',
+            edgecolor='#16213e',
+            figcolor='#1a1a2e',
+            gridcolor='#2a2a3e'
+        )
+
+        # Prepare horizontal lines for support/resistance
+        hlines = []
+        if len(support) > 0:
+            hlines.extend([{'y': float(s), 'color': '#26a69a', 'linestyle': '--', 'linewidths': 1} for s in support[:3]])
+        if len(resistance) > 0:
+            hlines.extend([{'y': float(r), 'color': '#ef5350', 'linestyle': '--', 'linewidths': 1} for r in resistance[:3]])
+
+        # Add pattern levels if available
+        if patterns:
+            pattern = patterns[0]  # Use first pattern
+            # Entry zone
+            if hasattr(pattern, 'entry_zone') and len(pattern.entry_zone) >= 2:
+                hlines.append({'y': float(pattern.entry_zone[0]), 'color': '#FFA726', 'linestyle': '-', 'linewidths': 2})
+            # Stop loss
+            if hasattr(pattern, 'stop_loss'):
+                hlines.append({'y': float(pattern.stop_loss), 'color': '#EF5350', 'linestyle': '-', 'linewidths': 2})
+            # Targets
+            if hasattr(pattern, 'targets') and len(pattern.targets) > 0:
+                hlines.append({'y': float(pattern.targets[0]), 'color': '#66BB6A', 'linestyle': '-', 'linewidths': 2})
+
+        # Create chart
+        fig, axes = mpf.plot(
+            df,
+            type='candle',
+            style=s,
+            title=f'{symbol} - {timeframe.upper()}',
+            ylabel='Price (USDT)',
+            volume=True,
+            hlines=dict(hlines=hlines) if hlines else None,
+            returnfig=True,
+            figsize=(12, 6),
+            tight_layout=True
+        )
+
+        # Save to bytes buffer
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=100, facecolor='#1a1a2e')
+        buf.seek(0)
+        plt.close(fig)
+
+        # Convert to base64
+        img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+        return jsonify({
+            'success': True,
+            'image': f'data:image/png;base64,{img_base64}'
+        })
+
+    except Exception as e:
+        log_error(e, f"api_chart({symbol})")
         return jsonify({
             'success': False,
             'error': str(e),
