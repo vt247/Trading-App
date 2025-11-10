@@ -175,15 +175,15 @@ def api_analyze(symbol):
         patterns_data = []
         for pattern in patterns:
             patterns_data.append({
-                'type': pattern.pattern_type,
-                'confidence': pattern.confidence,
-                'entry_zone': pattern.entry_zone,
-                'stop_loss': pattern.stop_loss,
-                'targets': pattern.targets,
-                'risk_reward': pattern.risk_reward,
-                'description': pattern.description,
-                'volume_confirmation': pattern.volume_confirmation,
-                'institutional_signal': pattern.institutional_signal
+                'type': str(pattern.pattern_type),
+                'confidence': float(pattern.confidence),
+                'entry_zone': [float(x) for x in pattern.entry_zone],
+                'stop_loss': float(pattern.stop_loss),
+                'targets': [float(t) for t in pattern.targets],
+                'risk_reward': float(pattern.risk_reward),
+                'description': str(pattern.description),
+                'volume_confirmation': bool(pattern.volume_confirmation),
+                'institutional_signal': bool(pattern.institutional_signal)
             })
 
         return jsonify({
