@@ -5,9 +5,8 @@ services:
     region: frankfurt
     plan: free
     branch: claude/finnish-app-development-011CUznvzaNBspwCfjRCQeSR
-    rootDirectory: .
     buildCommand: pip install -r requirements.txt
-    startCommand: python web_dashboard.py --host 0.0.0.0 --port $PORT
+    startCommand: cd /opt/render/project/src && PYTHONPATH=/opt/render/project/src python web_dashboard.py --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
