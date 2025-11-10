@@ -9,6 +9,8 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 import time
+import threading
+from collections import defaultdict
 
 from wolf_analyzer.core.config import Config
 
@@ -17,6 +19,14 @@ class MarketDataConnector:
     """
     Connects to cryptocurrency exchanges and fetches market data
     """
+
+    # Class-level cache shared across instances
+    _cache = {}
+    _cache_timestamps = {}
+    _cache_ttl = 60  # Cache TTL in seconds (1 minute)
+    _request_lock = threading.Lock()
+    _last_request_time = 0
+    _min_request_interval = 1.2  # Minimum seconds between requests
 
     def __init__(self, exchange_name: str = "binance"):
         """
@@ -58,6 +68,73 @@ class MarketDataConnector:
             exchange_class = getattr(ccxt, self.exchange_name)
             return exchange_class({'enableRateLimit': True})
 
+    def _get_cache_key(self, symbol: str, timeframe: str, limit: int) -> str:
+        """Generate cache key for request"""
+        return f"{symbol}:{timeframe}:{limit}"
+
+    def _get_cached_data(self, cache_key: str) -> Optional[pd.DataFrame]:
+        """Get data from cache if available and not expired"""
+        if cache_key not in self._cache:
+            return None
+
+        # Check if cache is expired
+        cache_time = self._cache_timestamps.get(cache_key, 0)
+        if time.time() - cache_time > self._cache_ttl:
+            # Cache expired
+            del self._cache[cache_key]
+            del self._cache_timestamps[cache_key]
+            return None
+
+        return self._cache[cache_key].copy()
+
+    def _set_cache(self, cache_key: str, data: pd.DataFrame):
+        """Store data in cache"""
+        self._cache[cache_key] = data.copy()
+        self._cache_timestamps[cache_key] = time.time()
+
+    def _rate_limit_wait(self):
+        """Enforce rate limiting between requests"""
+        with self._request_lock:
+            current_time = time.time()
+            time_since_last = current_time - MarketDataConnector._last_request_time
+
+            if time_since_last < self._min_request_interval:
+                sleep_time = self._min_request_interval - time_since_last
+                time.sleep(sleep_time)
+
+            MarketDataConnector._last_request_time = time.time()
+
+    def _fetch_with_retry(self, fetch_func, max_retries=3):
+        """
+        Fetch data with exponential backoff retry logic
+
+        Args:
+            fetch_func: Function to call for fetching data
+            max_retries: Maximum number of retry attempts
+
+        Returns:
+            Result from fetch_func or raises exception
+        """
+        for attempt in range(max_retries):
+            try:
+                self._rate_limit_wait()
+                result = fetch_func()
+                return result
+
+            except ccxt.DDoSProtection as e:
+                if attempt < max_retries - 1:
+                    # Exponential backoff: 2^attempt seconds
+                    wait_time = 2 ** attempt
+                    print(f"⚠️  Rate limited, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"❌ Rate limit exceeded after {max_retries} attempts")
+                    raise
+
+            except Exception as e:
+                # For other errors, don't retry
+                raise
+
     def get_ohlcv(
         self,
         symbol: str,
@@ -66,7 +143,7 @@ class MarketDataConnector:
         since: Optional[int] = None
     ) -> pd.DataFrame:
         """
-        Fetch OHLCV (Open, High, Low, Close, Volume) data
+        Fetch OHLCV (Open, High, Low, Close, Volume) data with caching
 
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
@@ -77,14 +154,26 @@ class MarketDataConnector:
         Returns:
             DataFrame with OHLCV data
         """
+        # Check cache first (only if 'since' is not specified)
+        if since is None:
+            cache_key = self._get_cache_key(symbol, timeframe, limit)
+            cached_data = self._get_cached_data(cache_key)
+            if cached_data is not None:
+                print(f"📦 Using cached data for {symbol}")
+                return cached_data
+
         try:
-            # Fetch OHLCV data
-            ohlcv = self.exchange.fetch_ohlcv(
-                symbol=symbol,
-                timeframe=timeframe,
-                limit=limit,
-                since=since
-            )
+            # Define fetch function for retry logic
+            def fetch():
+                return self.exchange.fetch_ohlcv(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    limit=limit,
+                    since=since
+                )
+
+            # Fetch with retry and rate limiting
+            ohlcv = self._fetch_with_retry(fetch)
 
             # Convert to DataFrame
             df = pd.DataFrame(
@@ -99,6 +188,11 @@ class MarketDataConnector:
             # Ensure numeric types
             for col in ['open', 'high', 'low', 'close', 'volume']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            # Cache the result (only if 'since' is not specified)
+            if since is None:
+                cache_key = self._get_cache_key(symbol, timeframe, limit)
+                self._set_cache(cache_key, df)
 
             return df
 
@@ -126,7 +220,10 @@ class MarketDataConnector:
             Current price or None if error
         """
         try:
-            ticker = self.exchange.fetch_ticker(symbol)
+            def fetch():
+                return self.exchange.fetch_ticker(symbol)
+
+            ticker = self._fetch_with_retry(fetch)
             return ticker['last']
         except Exception as e:
             print(f"Error fetching price for {symbol}: {str(e)}")
@@ -143,7 +240,10 @@ class MarketDataConnector:
             Dictionary with ticker data
         """
         try:
-            ticker = self.exchange.fetch_ticker(symbol)
+            def fetch():
+                return self.exchange.fetch_ticker(symbol)
+
+            ticker = self._fetch_with_retry(fetch)
             return {
                 'symbol': symbol,
                 'price': ticker['last'],

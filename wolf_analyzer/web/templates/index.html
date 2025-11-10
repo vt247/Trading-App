@@ -166,11 +166,11 @@ document.addEventListener('DOMContentLoaded', () => {
     checkStatus();
     loadWatchlist();
 
-    // Auto-refresh every 30 seconds
+    // Auto-refresh every 2 minutes (reduced to avoid rate limiting)
     setInterval(() => {
         loadWatchlist();
         checkStatus();
-    }, 30000);
+    }, 120000);
 });
 </script>
 {% endblock %}

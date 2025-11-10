@@ -283,8 +283,8 @@ function getTrendEmoji(trend) {
 document.addEventListener('DOMContentLoaded', () => {
     loadAnalysis();
 
-    // Auto-refresh every 60 seconds
-    setInterval(loadAnalysis, 60000);
+    // Auto-refresh every 2 minutes (reduced to avoid rate limiting)
+    setInterval(loadAnalysis, 120000);
 
     // Timeframe change handler
     document.getElementById('timeframe-select').addEventListener('change', loadAnalysis);
