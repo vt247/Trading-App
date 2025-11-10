@@ -137,7 +137,7 @@ def api_debug():
     })
 
 
-@app.route('/api/analyze/<symbol>')
+@app.route('/api/analyze/<path:symbol>')
 def api_analyze(symbol):
     """Analyze specific symbol"""
     try:
