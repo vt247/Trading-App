@@ -8,6 +8,8 @@ from flask_cors import CORS
 from datetime import datetime
 import sys
 import os
+import traceback
+from collections import deque
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -21,11 +23,46 @@ from wolf_analyzer.ai.claude_analyzer import ClaudeAnalyzer
 app = Flask(__name__)
 CORS(app)
 
+# Debug system - store last 50 errors
+error_log = deque(maxlen=50)
+
+def log_error(error, context=""):
+    """Log error to debug system"""
+    error_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'error': str(error),
+        'type': type(error).__name__,
+        'context': context,
+        'traceback': traceback.format_exc()
+    }
+    error_log.append(error_entry)
+    print(f"ERROR [{context}]: {error}")
+    print(traceback.format_exc())
+
 # Initialize components
-market_data = MarketDataConnector()
-pattern_recognition = PatternRecognition()
-indicators = TechnicalIndicators()
-ai_analyzer = ClaudeAnalyzer()
+try:
+    market_data = MarketDataConnector()
+except Exception as e:
+    log_error(e, "MarketDataConnector init")
+    market_data = None
+
+try:
+    pattern_recognition = PatternRecognition()
+except Exception as e:
+    log_error(e, "PatternRecognition init")
+    pattern_recognition = None
+
+try:
+    indicators = TechnicalIndicators()
+except Exception as e:
+    log_error(e, "TechnicalIndicators init")
+    indicators = None
+
+try:
+    ai_analyzer = ClaudeAnalyzer()
+except Exception as e:
+    log_error(e, "ClaudeAnalyzer init")
+    ai_analyzer = None
 
 
 @app.route('/')
@@ -84,10 +121,33 @@ def api_watchlist():
     })
 
 
+@app.route('/api/debug')
+def api_debug():
+    """Debug endpoint - show recent errors"""
+    return jsonify({
+        'success': True,
+        'errors': list(error_log),
+        'total_errors': len(error_log),
+        'components': {
+            'market_data': market_data is not None,
+            'pattern_recognition': pattern_recognition is not None,
+            'indicators': indicators is not None,
+            'ai_analyzer': ai_analyzer is not None
+        }
+    })
+
+
 @app.route('/api/analyze/<symbol>')
 def api_analyze(symbol):
     """Analyze specific symbol"""
     try:
+        if not market_data:
+            raise Exception("MarketDataConnector not initialized")
+        if not indicators:
+            raise Exception("TechnicalIndicators not initialized")
+        if not pattern_recognition:
+            raise Exception("PatternRecognition not initialized")
+
         timeframe = request.args.get('timeframe', '4h')
 
         # Fetch data
@@ -96,7 +156,7 @@ def api_analyze(symbol):
         if df.empty:
             return jsonify({
                 'success': False,
-                'error': 'No data available'
+                'error': 'No data available for this symbol'
             }), 404
 
         # Get current price
@@ -146,9 +206,11 @@ def api_analyze(symbol):
         })
 
     except Exception as e:
+        log_error(e, f"api_analyze({symbol})")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'type': type(e).__name__
         }), 500
 
 
@@ -290,11 +352,32 @@ def brief_page():
 
 @app.errorhandler(404)
 def not_found(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'success': False, 'error': 'Not found'}), 404
     return render_template('404.html'), 404
 
 
 @app.errorhandler(500)
 def server_error(e):
+    log_error(e, "500 Internal Server Error")
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'message': str(e)
+        }), 500
+    return render_template('500.html'), 500
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    log_error(e, f"Unhandled exception on {request.path}")
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'type': type(e).__name__
+        }), 500
     return render_template('500.html'), 500
 
 
