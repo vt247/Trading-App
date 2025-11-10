@@ -154,9 +154,18 @@ def api_analyze(symbol):
         df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=200)
 
         if df.empty:
+            # Check if API keys are configured
+            has_api_keys = bool(Config.BINANCE_API_KEY and Config.BINANCE_API_SECRET)
+            error_msg = 'No data available for this symbol. '
+            if not has_api_keys:
+                error_msg += 'Binance API keys are not configured in Render environment variables. Please add BINANCE_API_KEY and BINANCE_API_SECRET to your service settings.'
+            else:
+                error_msg += 'Check Render logs for detailed error information.'
+
             return jsonify({
                 'success': False,
-                'error': 'No data available for this symbol'
+                'error': error_msg,
+                'has_api_keys': has_api_keys
             }), 404
 
         # Get current price

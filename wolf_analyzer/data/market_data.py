@@ -103,7 +103,16 @@ class MarketDataConnector:
             return df
 
         except Exception as e:
-            print(f"Error fetching OHLCV for {symbol}: {str(e)}")
+            error_msg = f"Error fetching OHLCV for {symbol}: {str(e)}"
+            print(error_msg)
+            print(f"  Timeframe: {timeframe}, Limit: {limit}")
+            print(f"  Exchange: {self.exchange_name}")
+            print(f"  Has API keys: {bool(Config.BINANCE_API_KEY)}")
+
+            # Log the full exception for debugging
+            import traceback
+            print(traceback.format_exc())
+
             return pd.DataFrame()
 
     def get_current_price(self, symbol: str) -> Optional[float]:
