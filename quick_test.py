@@ -6,8 +6,8 @@ sys.path.insert(0, '/home/user/Trading-App')
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from src.analysis.pattern_recognition import PatternRecognition
-from src.analysis.technical_indicators import TechnicalIndicators
+from wolf_analyzer.analysis.pattern_recognition import PatternRecognition
+from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
 
 print("=" * 70)
 print("🧪 QUICK TEST: Detailed Analysis")

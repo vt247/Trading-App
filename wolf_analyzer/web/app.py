@@ -12,11 +12,11 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from src.core.config import Config
-from src.data.market_data import MarketDataConnector
-from src.analysis.pattern_recognition import PatternRecognition
-from src.analysis.technical_indicators import TechnicalIndicators
-from src.ai.claude_analyzer import ClaudeAnalyzer
+from wolf_analyzer.core.config import Config
+from wolf_analyzer.data.market_data import MarketDataConnector
+from wolf_analyzer.analysis.pattern_recognition import PatternRecognition
+from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
+from wolf_analyzer.ai.claude_analyzer import ClaudeAnalyzer
 
 app = Flask(__name__)
 CORS(app)

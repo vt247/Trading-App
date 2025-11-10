@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
-from src.core.config import Config
+from wolf_analyzer.core.config import Config
 
 Base = declarative_base()
 

@@ -12,11 +12,11 @@ from datetime import datetime, timedelta
 # Add src to path
 sys.path.insert(0, '/home/user/Trading-App')
 
-from src.analysis.pattern_recognition import PatternRecognition
-from src.analysis.technical_indicators import TechnicalIndicators
-from src.analysis.chart_generator import ChartGenerator
-from src.ai.claude_analyzer import ClaudeAnalyzer
-from src.core.config import Config
+from wolf_analyzer.analysis.pattern_recognition import PatternRecognition
+from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
+from wolf_analyzer.analysis.chart_generator import ChartGenerator
+from wolf_analyzer.ai.claude_analyzer import ClaudeAnalyzer
+from wolf_analyzer.core.config import Config
 
 
 def generate_sample_data(days=100, trend='bullish'):

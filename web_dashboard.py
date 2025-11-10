@@ -12,8 +12,8 @@ import argparse
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from src.web.app import run_dashboard
-from src.core.config import Config
+from wolf_analyzer.web.app import run_dashboard
+from wolf_analyzer.core.config import Config
 
 
 def main():

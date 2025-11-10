@@ -3,7 +3,7 @@ Database Initialization Script
 Run this to create the database and tables
 """
 
-from src.database.models import init_database
+from wolf_analyzer.database.models import init_database
 
 if __name__ == "__main__":
     print("🐺 Wolf Market Analyzer - Database Setup")

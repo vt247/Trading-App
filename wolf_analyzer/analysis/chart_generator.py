@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime
 
-from src.core.config import Config
-from src.analysis.pattern_recognition import Pattern
+from wolf_analyzer.core.config import Config
+from wolf_analyzer.analysis.pattern_recognition import Pattern
 
 
 class ChartGenerator:
@@ -263,8 +263,8 @@ class ChartGenerator:
 
 # Example usage
 if __name__ == "__main__":
-    from src.data.market_data import MarketDataConnector
-    from src.analysis.pattern_recognition import PatternRecognition
+    from wolf_analyzer.data.market_data import MarketDataConnector
+    from wolf_analyzer.analysis.pattern_recognition import PatternRecognition
 
     # Fetch data
     connector = MarketDataConnector()

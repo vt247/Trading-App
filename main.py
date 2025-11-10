@@ -9,11 +9,11 @@ import argparse
 from datetime import datetime
 from typing import List, Dict
 
-from src.core.config import Config
-from src.data.market_data import MarketDataConnector
-from src.analysis.pattern_recognition import PatternRecognition, Pattern
-from src.analysis.chart_generator import ChartGenerator
-from src.ai.claude_analyzer import ClaudeAnalyzer
+from wolf_analyzer.core.config import Config
+from wolf_analyzer.data.market_data import MarketDataConnector
+from wolf_analyzer.analysis.pattern_recognition import PatternRecognition, Pattern
+from wolf_analyzer.analysis.chart_generator import ChartGenerator
+from wolf_analyzer.ai.claude_analyzer import ClaudeAnalyzer
 
 
 class WolfAnalyzer:

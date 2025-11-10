@@ -6,8 +6,8 @@ sys.path.insert(0, '/home/user/Trading-App')
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from src.analysis.chart_generator import ChartGenerator
-from src.analysis.pattern_recognition import Pattern
+from wolf_analyzer.analysis.chart_generator import ChartGenerator
+from wolf_analyzer.analysis.pattern_recognition import Pattern
 
 # Generate sample data
 dates = pd.date_range(start=datetime.now() - timedelta(days=30), end=datetime.now(), freq='4H')

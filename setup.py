@@ -11,7 +11,7 @@ setup(
     version="1.0.0",
     description="AI-powered trading analysis using FOOS4 methodology",
     author="Wolf Trading Team",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*"]),
     python_requires=">=3.11",
     install_requires=[
         # Core Dependencies

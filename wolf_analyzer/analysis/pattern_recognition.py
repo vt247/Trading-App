@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.analysis.technical_indicators import TechnicalIndicators
+from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
 
 
 @dataclass

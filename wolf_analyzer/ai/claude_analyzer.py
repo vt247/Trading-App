@@ -7,8 +7,8 @@ import anthropic
 from typing import Dict, List, Optional
 import json
 
-from src.core.config import Config
-from src.analysis.pattern_recognition import Pattern
+from wolf_analyzer.core.config import Config
+from wolf_analyzer.analysis.pattern_recognition import Pattern
 
 
 class ClaudeAnalyzer:
