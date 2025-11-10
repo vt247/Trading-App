@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Wolf Market Analyzer{% endblock %}
+
+{% block content %}
+<div class="dashboard-header mb-3">
+    <h1>🐺 Market Dashboard</h1>
+    <p class="card-subtitle">Real-time market analysis and pattern recognition</p>
+</div>
+
+<!-- System Status -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">System Status</h2>
+        <span id="status-indicator" class="stat-change">● Checking...</span>
+    </div>
+    <div class="dashboard-grid">
+        <div>
+            <p class="level-label">Account Size</p>
+            <p class="stat-value">{{ '${:,.2f}'.format(account_size) }}</p>
+        </div>
+        <div>
+            <p class="level-label">Risk per Trade</p>
+            <p class="stat-value">{{ risk_per_trade }}%</p>
+        </div>
+        <div>
+            <p class="level-label">Watchlist</p>
+            <p class="stat-value">{{ watchlist|length }} symbols</p>
+        </div>
+        <div id="active-patterns">
+            <p class="level-label">Active Patterns</p>
+            <p class="stat-value">-</p>
+        </div>
+    </div>
+</div>
+
+<!-- Watchlist Overview -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">📊 Watchlist</h2>
+        <button class="btn btn-primary" onclick="refreshWatchlist()">🔄 Refresh</button>
+    </div>
+    <div id="watchlist-container">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading watchlist...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="dashboard-grid">
+    <div class="card">
+        <h3 class="card-title mb-2">🔍 Analyze Symbol</h3>
+        <p class="card-subtitle">Deep analysis of specific asset</p>
+        <select id="analyze-select" class="btn" style="width: 100%; margin-bottom: 1rem;">
+            {% for symbol in watchlist %}
+            <option value="{{ symbol }}">{{ symbol }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary" onclick="analyzeSelected()" style="width: 100%;">Analyze</button>
+    </div>
+
+    <div class="card">
+        <h3 class="card-title mb-2">🔎 Scan Watchlist</h3>
+        <p class="card-subtitle">Find all active setups</p>
+        <a href="/scan" class="btn btn-primary" style="width: 100%; text-align: center; margin-top: 1rem;">Start Scan</a>
+    </div>
+
+    <div class="card">
+        <h3 class="card-title mb-2">📰 Daily Briefing</h3>
+        <p class="card-subtitle">AI-powered market overview</p>
+        <a href="/brief" class="btn btn-primary" style="width: 100%; text-align: center; margin-top: 1rem;">View Brief</a>
+    </div>
+</div>
+
+<script>
+// Check system status
+async function checkStatus() {
+    try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+
+        const indicator = document.getElementById('status-indicator');
+        if (data.status === 'online') {
+            indicator.textContent = '● Online';
+            indicator.classList.add('positive');
+        } else {
+            indicator.textContent = '● Offline';
+            indicator.classList.add('negative');
+        }
+    } catch (error) {
+        console.error('Status check failed:', error);
+    }
+}
+
+// Load watchlist
+async function loadWatchlist() {
+    const container = document.getElementById('watchlist-container');
+
+    try {
+        const response = await fetch('/api/watchlist');
+        const result = await response.json();
+
+        if (!result.success) {
+            container.innerHTML = '<p>Error loading watchlist</p>';
+            return;
+        }
+
+        let html = '';
+        let patternCount = 0;
+
+        result.data.forEach(item => {
+            const changeClass = item.change_24h >= 0 ? 'positive' : 'negative';
+            const changeSymbol = item.change_24h >= 0 ? '▲' : '▼';
+
+            html += `
+                <div class="watchlist-item" onclick="analyzeSymbol('${item.symbol}')">
+                    <div class="symbol-info">
+                        <div class="symbol-name">${item.symbol}</div>
+                        <div class="symbol-price">${formatCurrency(item.price)}</div>
+                    </div>
+                    <div>
+                        <span class="stat-change ${changeClass}">
+                            ${changeSymbol} ${formatPercent(item.change_24h)}
+                        </span>
+                        <div class="symbol-price" style="margin-top: 0.25rem;">
+                            Vol: ${formatVolume(item.volume_24h)}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+        // Update active patterns count (would need separate endpoint)
+        document.querySelector('#active-patterns .stat-value').textContent = '-';
+
+    } catch (error) {
+        console.error('Error loading watchlist:', error);
+        container.innerHTML = '<p class="text-center" style="color: var(--danger-color);">Failed to load watchlist</p>';
+    }
+}
+
+// Refresh watchlist
+function refreshWatchlist() {
+    showLoading('watchlist-container');
+    loadWatchlist();
+}
+
+// Analyze selected symbol
+function analyzeSelected() {
+    const select = document.getElementById('analyze-select');
+    const symbol = select.value;
+    analyzeSymbol(symbol);
+}
+
+// Navigate to analysis page
+function analyzeSymbol(symbol) {
+    window.location.href = `/analyze?symbol=${encodeURIComponent(symbol)}`;
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    checkStatus();
+    loadWatchlist();
+
+    // Auto-refresh every 30 seconds
+    setInterval(() => {
+        loadWatchlist();
+        checkStatus();
+    }, 30000);
+});
+</script>
+{% endblock %}

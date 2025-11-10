@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Analyze {{ symbol }} - Wolf Market Analyzer{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="/" class="btn" style="background-color: var(--card-bg);">← Back to Dashboard</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <h1 class="card-title">🔍 Analyzing: <span id="symbol-name">{{ symbol }}</span></h1>
+        <div>
+            <select id="timeframe-select" class="btn" style="margin-right: 0.5rem;">
+                <option value="1h">1H</option>
+                <option value="4h" selected>4H</option>
+                <option value="1d">1D</option>
+                <option value="1w">1W</option>
+            </select>
+            <button class="btn btn-primary" onclick="loadAnalysis()">🔄 Refresh</button>
+        </div>
+    </div>
+
+    <!-- Current Price -->
+    <div id="price-info" class="dashboard-grid mb-2">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading price data...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Technical Indicators -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">📈 Technical Indicators</h2>
+    </div>
+    <div id="indicators-container">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Calculating indicators...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Patterns -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">🎯 Detected Patterns</h2>
+    </div>
+    <div id="patterns-container">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Analyzing patterns...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+const symbol = "{{ symbol }}";
+
+async function loadAnalysis() {
+    const timeframe = document.getElementById('timeframe-select').value;
+
+    // Show loading
+    showLoading('price-info');
+    showLoading('indicators-container');
+    showLoading('patterns-container');
+
+    try {
+        const response = await fetch(`/api/analyze/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+        const data = await response.json();
+
+        if (!data.success) {
+            showError('price-info', data.error);
+            showError('indicators-container', data.error);
+            showError('patterns-container', data.error);
+            return;
+        }
+
+        // Display price info
+        displayPriceInfo(data);
+
+        // Display indicators
+        displayIndicators(data.indicators);
+
+        // Display patterns
+        displayPatterns(data.patterns);
+
+    } catch (error) {
+        console.error('Analysis error:', error);
+        showError('price-info', error.message);
+        showError('indicators-container', error.message);
+        showError('patterns-container', error.message);
+    }
+}
+
+function displayPriceInfo(data) {
+    const container = document.getElementById('price-info');
+    const changeClass = data.change_24h >= 0 ? 'positive' : 'negative';
+
+    container.innerHTML = `
+        <div>
+            <p class="level-label">Current Price</p>
+            <p class="stat-value">${formatCurrency(data.current_price)}</p>
+        </div>
+        <div>
+            <p class="level-label">24h Change</p>
+            <p class="stat-value stat-change ${changeClass}">${formatPercent(data.change_24h)}</p>
+        </div>
+        <div>
+            <p class="level-label">Timeframe</p>
+            <p class="stat-value">${data.timeframe.toUpperCase()}</p>
+        </div>
+        <div>
+            <p class="level-label">Trend</p>
+            <p class="stat-value">${getTrendEmoji(data.indicators.trend)} ${data.indicators.trend.toUpperCase()}</p>
+        </div>
+    `;
+}
+
+function displayIndicators(indicators) {
+    const container = document.getElementById('indicators-container');
+
+    // RSI signal
+    let rsiSignal = 'neutral';
+    let rsiText = 'Neutral';
+    if (indicators.rsi < 30) {
+        rsiSignal = 'bullish';
+        rsiText = 'Oversold';
+    } else if (indicators.rsi > 70) {
+        rsiSignal = 'bearish';
+        rsiText = 'Overbought';
+    }
+
+    // MACD signal
+    const macdSignal = indicators.macd_histogram > 0 ? 'bullish' : 'bearish';
+    const macdText = indicators.macd_histogram > 0 ? 'Bullish' : 'Bearish';
+
+    container.innerHTML = `
+        <div class="indicator-grid">
+            <div class="indicator-item">
+                <div class="indicator-name">RSI (14)</div>
+                <div class="indicator-value">${indicators.rsi.toFixed(2)}</div>
+                <div class="indicator-signal ${rsiSignal}">${rsiText}</div>
+            </div>
+
+            <div class="indicator-item">
+                <div class="indicator-name">MACD</div>
+                <div class="indicator-value">${indicators.macd.toFixed(2)}</div>
+                <div class="indicator-signal ${macdSignal}">${macdText}</div>
+            </div>
+
+            <div class="indicator-item">
+                <div class="indicator-name">Support</div>
+                <div class="indicator-value">${indicators.support.length}</div>
+                <div class="indicator-signal neutral">${indicators.support.map(s => formatCurrency(s)).join(', ')}</div>
+            </div>
+
+            <div class="indicator-item">
+                <div class="indicator-name">Resistance</div>
+                <div class="indicator-value">${indicators.resistance.length}</div>
+                <div class="indicator-signal neutral">${indicators.resistance.map(r => formatCurrency(r)).join(', ')}</div>
+            </div>
+        </div>
+    `;
+}
+
+function displayPatterns(patterns) {
+    const container = document.getElementById('patterns-container');
+
+    if (!patterns || patterns.length === 0) {
+        container.innerHTML = `
+            <div class="text-center">
+                <p style="color: var(--text-muted); padding: 2rem;">
+                    ⚠️ No high-confidence patterns detected at this time.
+                    <br>
+                    <small>This is normal - not all market conditions show clear patterns.</small>
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+
+    patterns.forEach((pattern, index) => {
+        const badgeClass = pattern.type.includes('Ascending') || pattern.type.includes('Resistance Break') ? 'bullish' : 'bearish';
+
+        html += `
+            <div class="pattern-detail">
+                <div class="pattern-header">
+                    <h3 class="card-title">${pattern.type}</h3>
+                    <span class="confidence-badge">${(pattern.confidence * 100).toFixed(0)}% Confidence</span>
+                </div>
+
+                <p class="card-subtitle">${pattern.description}</p>
+
+                <div class="pattern-levels">
+                    <div class="level-item">
+                        <div class="level-label">📍 Entry Zone</div>
+                        <div class="level-value">${formatCurrency(pattern.entry_zone[0])}</div>
+                        <div class="level-value">${formatCurrency(pattern.entry_zone[1])}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">🛑 Stop Loss</div>
+                        <div class="level-value">${formatCurrency(pattern.stop_loss)}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">🎯 Target 1</div>
+                        <div class="level-value">${formatCurrency(pattern.targets[0])}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">📊 R:R Ratio</div>
+                        <div class="level-value">${pattern.risk_reward.toFixed(2)}:1</div>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <span class="pattern-badge ${badgeClass}">
+                        ${pattern.volume_confirmation ? '✓' : '✗'} Volume
+                    </span>
+                    <span class="pattern-badge ${badgeClass}">
+                        ${pattern.institutional_signal ? '✓' : '✗'} Institutional
+                    </span>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function getTrendEmoji(trend) {
+    if (trend === 'bullish') return '📈';
+    if (trend === 'bearish') return '📉';
+    return '➡️';
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadAnalysis();
+
+    // Auto-refresh every 60 seconds
+    setInterval(loadAnalysis, 60000);
+
+    // Timeframe change handler
+    document.getElementById('timeframe-select').addEventListener('change', loadAnalysis);
+});
+</script>
+{% endblock %}

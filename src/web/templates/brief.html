@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Brief - Wolf Market Analyzer{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="/" class="btn" style="background-color: var(--card-bg);">← Back to Dashboard</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <h1 class="card-title">📰 Daily Market Briefing</h1>
+        <button class="btn btn-primary" onclick="loadBrief()">🔄 Refresh</button>
+    </div>
+    <div style="padding: 1rem;">
+        <p class="card-subtitle">
+            🕐 Generated at <span id="brief-time">--:--</span>
+        </p>
+    </div>
+</div>
+
+<!-- Market Overview -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">📊 Market Overview</h2>
+    </div>
+    <div id="overview-container">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading market overview...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Active Patterns -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h2 class="card-title">🔥 Active Setups</h2>
+    </div>
+    <div id="patterns-container">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Analyzing patterns...</p>
+        </div>
+    </div>
+</div>
+
+<!-- AI Briefing -->
+<div class="card mb-3" id="ai-briefing-card" style="display: none;">
+    <div class="card-header">
+        <h2 class="card-title">🤖 AI Analysis</h2>
+    </div>
+    <div id="ai-briefing-container" style="padding: 1.5rem; line-height: 1.8; white-space: pre-wrap;">
+    </div>
+</div>
+
+<script>
+async function loadBrief() {
+    showLoading('overview-container');
+    showLoading('patterns-container');
+
+    try {
+        const response = await fetch('/api/brief');
+        const data = await response.json();
+
+        if (!data.success) {
+            showError('overview-container', data.error);
+            showError('patterns-container', data.error);
+            return;
+        }
+
+        // Update timestamp
+        document.getElementById('brief-time').textContent = new Date(data.timestamp).toLocaleTimeString();
+
+        // Display overview
+        displayOverview(data.overview);
+
+        // Display patterns
+        displayPatternsSummary(data.patterns);
+
+        // Display AI briefing if available
+        if (data.ai_briefing) {
+            displayAIBriefing(data.ai_briefing);
+        }
+
+    } catch (error) {
+        console.error('Brief error:', error);
+        showError('overview-container', error.message);
+        showError('patterns-container', error.message);
+    }
+}
+
+function displayOverview(overview) {
+    const container = document.getElementById('overview-container');
+
+    if (!overview || overview.length === 0) {
+        container.innerHTML = '<p class="text-center" style="padding: 2rem; color: var(--text-muted);">No data available</p>';
+        return;
+    }
+
+    let html = '<div class="dashboard-grid">';
+
+    overview.forEach(item => {
+        const changeClass = item.change_24h >= 0 ? 'positive' : 'negative';
+        const changeSymbol = item.change_24h >= 0 ? '▲' : '▼';
+
+        html += `
+            <div class="card">
+                <h3 class="card-title">${item.symbol}</h3>
+                <p class="stat-value">${formatCurrency(item.price)}</p>
+                <p class="stat-change ${changeClass}">${changeSymbol} ${formatPercent(item.change_24h)}</p>
+                ${item.patterns_count > 0 ? `<p class="mt-1" style="color: var(--primary-color);">🎯 ${item.patterns_count} pattern${item.patterns_count > 1 ? 's' : ''}</p>` : ''}
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function displayPatternsSummary(patterns) {
+    const container = document.getElementById('patterns-container');
+
+    if (!patterns || Object.keys(patterns).length === 0) {
+        container.innerHTML = `
+            <div class="text-center" style="padding: 2rem;">
+                <p style="color: var(--text-muted);">
+                    ⚠️ No high-confidence patterns detected currently
+                    <br>
+                    <small>Check back later or run a manual scan</small>
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+
+    Object.entries(patterns).forEach(([symbol, patternList]) => {
+        html += `<div class="pattern-detail">`;
+        html += `<h3 class="card-title mb-2">${symbol}</h3>`;
+
+        patternList.forEach(pattern => {
+            const badgeClass = pattern.type.includes('Ascending') || pattern.type.includes('Resistance') ? 'bullish' : 'bearish';
+
+            html += `
+                <div style="margin-bottom: 1rem;">
+                    <span class="pattern-badge ${badgeClass}">${pattern.type}</span>
+                    <span class="confidence-badge">${(pattern.confidence * 100).toFixed(0)}%</span>
+                    <span class="pattern-badge ${badgeClass}">R:R ${pattern.risk_reward.toFixed(2)}:1</span>
+                </div>
+            `;
+        });
+
+        html += `<button class="btn btn-primary" onclick="analyzeSymbol('${symbol}')">View Analysis</button>`;
+        html += `</div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+function displayAIBriefing(briefing) {
+    const card = document.getElementById('ai-briefing-card');
+    const container = document.getElementById('ai-briefing-container');
+
+    card.style.display = 'block';
+    container.textContent = briefing;
+}
+
+function analyzeSymbol(symbol) {
+    window.location.href = `/analyze?symbol=${encodeURIComponent(symbol)}`;
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadBrief();
+
+    // Auto-refresh every 5 minutes
+    setInterval(loadBrief, 300000);
+});
+</script>
+{% endblock %}

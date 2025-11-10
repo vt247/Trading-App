@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Scan - Wolf Market Analyzer{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="/" class="btn" style="background-color: var(--card-bg);">← Back to Dashboard</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">
+        <h1 class="card-title">🔎 Watchlist Scanner</h1>
+        <div>
+            <select id="scan-timeframe" class="btn" style="margin-right: 0.5rem;">
+                <option value="1h">1H</option>
+                <option value="4h" selected>4H</option>
+                <option value="1d">1D</option>
+            </select>
+            <button class="btn btn-primary" onclick="startScan()">🔄 Scan Now</button>
+        </div>
+    </div>
+
+    <div id="scan-status" class="text-center" style="padding: 1rem; color: var(--text-muted);">
+        Click "Scan Now" to start scanning for setups
+    </div>
+</div>
+
+<div id="results-container">
+    <!-- Results will be displayed here -->
+</div>
+
+<script>
+let scanning = false;
+
+async function startScan() {
+    if (scanning) return;
+
+    scanning = true;
+    const timeframe = document.getElementById('scan-timeframe').value;
+    const statusEl = document.getElementById('scan-status');
+    const resultsEl = document.getElementById('results-container');
+
+    // Show scanning status
+    statusEl.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Scanning watchlist for setups...</p>
+            <small>This may take 10-30 seconds</small>
+        </div>
+    `;
+    resultsEl.innerHTML = '';
+
+    try {
+        const response = await fetch(`/api/scan?timeframe=${timeframe}`);
+        const data = await response.json();
+
+        if (!data.success) {
+            statusEl.innerHTML = `<p style="color: var(--danger-color);">❌ Error: ${data.error}</p>`;
+            return;
+        }
+
+        // Display results
+        displayScanResults(data);
+
+    } catch (error) {
+        console.error('Scan error:', error);
+        statusEl.innerHTML = `<p style="color: var(--danger-color);">❌ Scan failed: ${error.message}</p>`;
+    } finally {
+        scanning = false;
+    }
+}
+
+function displayScanResults(data) {
+    const statusEl = document.getElementById('scan-status');
+    const resultsEl = document.getElementById('results-container');
+
+    if (data.count === 0) {
+        statusEl.innerHTML = `
+            <p style="color: var(--warning-color); padding: 2rem;">
+                ⚠️ No high-confidence setups found
+                <br>
+                <small>This is normal - quality over quantity!</small>
+            </p>
+        `;
+        return;
+    }
+
+    // Status summary
+    statusEl.innerHTML = `
+        <div style="padding: 1rem; background-color: rgba(38, 166, 154, 0.1); border-radius: 8px;">
+            <p style="font-size: 1.2rem; color: var(--primary-color); font-weight: bold;">
+                ✓ Found ${data.count} Setup${data.count > 1 ? 's' : ''}
+            </p>
+            <small>Sorted by confidence (highest first)</small>
+        </div>
+    `;
+
+    // Display setups
+    let html = '';
+
+    data.setups.forEach((setup, index) => {
+        const patternClass = setup.pattern_type.includes('Ascending') || setup.pattern_type.includes('Resistance') ? 'bullish' : 'bearish';
+
+        html += `
+            <div class="card mb-2">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">${index + 1}. ${setup.symbol}</h2>
+                        <span class="pattern-badge ${patternClass}">${setup.pattern_type}</span>
+                    </div>
+                    <span class="confidence-badge">${(setup.confidence * 100).toFixed(0)}%</span>
+                </div>
+
+                <div class="pattern-levels">
+                    <div class="level-item">
+                        <div class="level-label">Current Price</div>
+                        <div class="level-value">${formatCurrency(setup.current_price)}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">📍 Entry</div>
+                        <div class="level-value">${formatCurrency(setup.entry_zone[0])}-${formatCurrency(setup.entry_zone[1])}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">🛑 Stop</div>
+                        <div class="level-value">${formatCurrency(setup.stop_loss)}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">🎯 Target</div>
+                        <div class="level-value">${formatCurrency(setup.targets[0])}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">📊 R:R</div>
+                        <div class="level-value">${setup.risk_reward.toFixed(2)}:1</div>
+                    </div>
+
+                    <div class="level-item">
+                        <button class="btn btn-primary" onclick="analyzeSymbol('${setup.symbol}')" style="width: 100%;">
+                            View Full Analysis
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    resultsEl.innerHTML = html;
+}
+
+function analyzeSymbol(symbol) {
+    window.location.href = `/analyze?symbol=${encodeURIComponent(symbol)}`;
+}
+</script>
+{% endblock %}
