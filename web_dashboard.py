@@ -5,6 +5,7 @@ Easy launcher for the web interface
 """
 
 import sys
+import os
 import argparse
 
 # Add src to path
@@ -28,7 +29,7 @@ def main():
     parser.add_argument(
         '--port',
         type=int,
-        default=Config.PORT,
+        default=int(os.getenv('PORT', Config.PORT)),
         help=f'Port to bind to (default: {Config.PORT})'
     )
 

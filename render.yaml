@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: wolf-market-analyzer
+    env: python
+    region: frankfurt
+    plan: free
+    branch: claude/finnish-app-development-011CUznvzaNBspwCfjRCQeSR
+    buildCommand: pip install -r requirements.txt
+    startCommand: python web_dashboard.py --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WATCHLIST
+        value: BTC/USDT,ETH/USDT,SOL/USDT,AVAX/USDT,ARB/USDT
+      - key: ACCOUNT_SIZE
+        value: 10000
+      - key: RISK_PER_TRADE_PERCENT
+        value: 1.0
+      - key: MAX_OPEN_POSITIONS
+        value: 3
+      - key: MIN_RISK_REWARD
+        value: 2.0
+      - key: MIN_PATTERN_CONFIDENCE
+        value: 0.65
+      - key: DEFAULT_TIMEFRAME
+        value: 4h
+      - key: PORT
+        fromService:
+          name: wolf-market-analyzer
+          type: web
+          property: port

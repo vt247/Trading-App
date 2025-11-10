@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wolf Market Analyzer - Demo Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a2e;
+            color: #eaeaea;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+            padding: 1.5rem 2rem;
+            border-bottom: 2px solid #2d3748;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #26a69a;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .card {
+            background-color: #16213e;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #26a69a;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #26a69a;
+        }
+
+        .stat-label {
+            color: #9e9e9e;
+            font-size: 0.9rem;
+        }
+
+        .watchlist-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 1rem;
+            background-color: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .positive {
+            color: #66bb6a;
+        }
+
+        .negative {
+            color: #ef5350;
+        }
+
+        .pattern-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+            background-color: rgba(38, 166, 154, 0.2);
+            color: #26a69a;
+            border: 1px solid #26a69a;
+        }
+
+        .status-online {
+            color: #66bb6a;
+        }
+
+        .demo-note {
+            background-color: rgba(255, 167, 38, 0.1);
+            border-left: 4px solid #ffa726;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">🐺 Wolf Market Analyzer</div>
+            <div style="color: #66bb6a;">● DEMO MODE</div>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="demo-note">
+            <h2 style="color: #ffa726; margin-bottom: 0.5rem;">📱 Demo Dashboard</h2>
+            <p>This is a static demo showing what the web dashboard looks like.</p>
+            <p><strong>To use the live version:</strong> Clone the repo and run <code style="background: rgba(0,0,0,0.3); padding: 0.2rem 0.5rem; border-radius: 3px;">python web_dashboard.py</code> on your local machine.</p>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">System Status</h2>
+            <div class="dashboard-grid">
+                <div>
+                    <p class="stat-label">System Status</p>
+                    <p class="stat-value status-online">● Online</p>
+                </div>
+                <div>
+                    <p class="stat-label">Account Size</p>
+                    <p class="stat-value">$10,000</p>
+                </div>
+                <div>
+                    <p class="stat-label">Risk per Trade</p>
+                    <p class="stat-value">1.0%</p>
+                </div>
+                <div>
+                    <p class="stat-label">Watchlist</p>
+                    <p class="stat-value">5 symbols</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">📊 Watchlist</h2>
+            <div class="watchlist-item">
+                <div>
+                    <div style="font-weight: bold; font-size: 1.1rem;">BTC/USDT</div>
+                    <div style="color: #9e9e9e;">$42,500.00</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="positive">▲ +2.3%</div>
+                    <div style="color: #9e9e9e; font-size: 0.9rem;">Vol: 85.2M</div>
+                </div>
+            </div>
+
+            <div class="watchlist-item">
+                <div>
+                    <div style="font-weight: bold; font-size: 1.1rem;">ETH/USDT</div>
+                    <div style="color: #9e9e9e;">$2,450.00</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="positive">▲ +1.8%</div>
+                    <div style="color: #9e9e9e; font-size: 0.9rem;">Vol: 45.3M</div>
+                </div>
+            </div>
+
+            <div class="watchlist-item">
+                <div>
+                    <div style="font-weight: bold; font-size: 1.1rem;">SOL/USDT</div>
+                    <div style="color: #9e9e9e;">$58.30</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="negative">▼ -0.5%</div>
+                    <div style="color: #9e9e9e; font-size: 0.9rem;">Vol: 12.8M</div>
+                </div>
+            </div>
+
+            <div class="watchlist-item">
+                <div>
+                    <div style="font-weight: bold; font-size: 1.1rem;">AVAX/USDT</div>
+                    <div style="color: #9e9e9e;">$38.50</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="positive">▲ +3.2%</div>
+                    <div style="color: #9e9e9e; font-size: 0.9rem;">Vol: 8.5M</div>
+                </div>
+            </div>
+
+            <div class="watchlist-item">
+                <div>
+                    <div style="font-weight: bold; font-size: 1.1rem;">ARB/USDT</div>
+                    <div style="color: #9e9e9e;">$1.85</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="positive">▲ +0.8%</div>
+                    <div style="color: #9e9e9e; font-size: 0.9rem;">Vol: 15.2M</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">🎯 Example Pattern Detection</h2>
+            <div style="background-color: rgba(255,255,255,0.03); border-left: 4px solid #26a69a; padding: 1rem; border-radius: 5px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                    <h3>BTC/USDT - Ascending Triangle</h3>
+                    <span style="background-color: #26a69a; color: white; padding: 0.25rem 0.75rem; border-radius: 15px; font-weight: bold;">78% Confidence</span>
+                </div>
+
+                <p style="color: #9e9e9e; margin-bottom: 1rem;">
+                    Bullish continuation pattern with flat resistance and rising support. Volume decreasing into apex.
+                </p>
+
+                <div class="dashboard-grid" style="margin-bottom: 1rem;">
+                    <div style="background-color: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 5px;">
+                        <div class="stat-label">📍 Entry Zone</div>
+                        <div style="font-size: 1.1rem; font-weight: bold;">$42,250 - $42,350</div>
+                    </div>
+                    <div style="background-color: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 5px;">
+                        <div class="stat-label">🛑 Stop Loss</div>
+                        <div style="font-size: 1.1rem; font-weight: bold;">$41,800</div>
+                    </div>
+                    <div style="background-color: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 5px;">
+                        <div class="stat-label">🎯 Target 1</div>
+                        <div style="font-size: 1.1rem; font-weight: bold;">$42,850</div>
+                    </div>
+                    <div style="background-color: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 5px;">
+                        <div class="stat-label">📊 R:R Ratio</div>
+                        <div style="font-size: 1.1rem; font-weight: bold;">2.85:1</div>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="pattern-badge">✓ Volume Confirmed</span>
+                    <span class="pattern-badge">✓ Institutional Signal</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">📈 Technical Indicators (BTC/USDT)</h2>
+            <div class="dashboard-grid">
+                <div style="background-color: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; text-align: center;">
+                    <div class="stat-label">RSI (14)</div>
+                    <div style="font-size: 1.5rem; font-weight: bold;">65.5</div>
+                    <div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background-color: rgba(255,255,255,0.1); border-radius: 10px; font-size: 0.8rem;">Neutral</div>
+                </div>
+
+                <div style="background-color: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; text-align: center;">
+                    <div class="stat-label">MACD</div>
+                    <div style="font-size: 1.5rem; font-weight: bold;">125.3</div>
+                    <div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background-color: rgba(38, 166, 154, 0.2); color: #26a69a; border-radius: 10px; font-size: 0.8rem;">Bullish</div>
+                </div>
+
+                <div style="background-color: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; text-align: center;">
+                    <div class="stat-label">Trend</div>
+                    <div style="font-size: 1.5rem; font-weight: bold;">📈 Bullish</div>
+                    <div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background-color: rgba(38, 166, 154, 0.2); color: #26a69a; border-radius: 10px; font-size: 0.8rem;">Strong</div>
+                </div>
+
+                <div style="background-color: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; text-align: center;">
+                    <div class="stat-label">Support Levels</div>
+                    <div style="font-size: 1.5rem; font-weight: bold;">3</div>
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #9e9e9e;">$42K, $41.5K, $41K</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer style="text-align: center; padding: 2rem; color: #9e9e9e; border-top: 1px solid #2d3748; margin-top: 3rem;">
+        <p>🐺 Wolf Market Analyzer | Trade like a wolf, not a sheep</p>
+        <p style="font-size: 0.8rem; margin-top: 0.5rem;">Educational tool - Not financial advice</p>
+        <p style="margin-top: 1rem; font-size: 0.9rem;">
+            <strong>This is a static demo.</strong> For the live version, run <code style="background: rgba(0,0,0,0.3); padding: 0.2rem 0.5rem; border-radius: 3px;">python web_dashboard.py</code> on your local machine.
+        </p>
+    </footer>
+</body>
+</html>
