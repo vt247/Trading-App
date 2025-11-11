@@ -155,7 +155,7 @@ class FOOSPatternDetector:
         logger.info(f"      📊 Scanning range: index 50 to {len(df) - 20} ({len(df) - 70} windows)")
 
         if self.relaxed_mode:
-            logger.info(f"      🔓 RELAXED criteria: 1 neckline touch, 1.5:1 R:R, accepting bearish trends")
+            logger.info(f"      🔓 RELAXED criteria: wider neckline (2%), accept flat trendlines, no convergence check, 1.0:1 R:R")
 
         # Calculate indicators
         ema_13 = self.indicators.calculate_ema_13(df)
@@ -216,16 +216,18 @@ class FOOSPatternDetector:
 
             trendline_slope, trendline_indices = trendline_result
 
-            # Slope must be positive (ascending)
-            if trendline_slope <= 0:
+            # Slope must be positive (ascending) - Relaxed: accept flat/slightly descending
+            min_slope = -0.0001 if self.relaxed_mode else 0
+            if trendline_slope <= min_slope:
                 failed_trendline += 1
                 continue
 
-            # Step 4: Check for triangle convergence
+            # Step 4: Check for triangle convergence (skip in relaxed mode)
             # Lines should be getting closer (consolidation narrowing)
-            if not self._check_triangle_convergence(window, neckline_price, trendline_indices):
-                failed_convergence += 1
-                continue
+            if not self.relaxed_mode:
+                if not self._check_triangle_convergence(window, neckline_price, trendline_indices):
+                    failed_convergence += 1
+                    continue
 
             # Step 5: Check volume pattern (decreasing during consolidation)
             volume_decreasing = self._is_volume_decreasing(window)
@@ -271,8 +273,8 @@ class FOOSPatternDetector:
             reward = target_2 - entry_high
             risk_reward = reward / risk if risk > 0 else 0
 
-            # Only consider if R:R >= 2:1 (relaxed: 1.5:1)
-            min_risk_reward = 1.5 if self.relaxed_mode else 2.0
+            # Only consider if R:R >= 2:1 (relaxed: 1.0:1)
+            min_risk_reward = 1.0 if self.relaxed_mode else 2.0
             if risk_reward < min_risk_reward:
                 failed_risk_reward += 1
                 continue
@@ -325,15 +327,16 @@ class FOOSPatternDetector:
             total_failed = failed_lead_in + failed_neckline + failed_trendline + failed_convergence + failed_breakout + failed_risk_reward
             logger.info(f"         Total failed: {total_failed}")
 
-            min_rr = "1.5:1" if self.relaxed_mode else "2:1"
+            min_rr = "1.0:1" if self.relaxed_mode else "2:1"
             min_touches = "1+" if self.relaxed_mode else "2+"
+            trendline_desc = "flat/ascending" if self.relaxed_mode else "ascending"
 
             if failed_lead_in > 0:
-                logger.info(f"         ↳ {failed_lead_in} ({failed_lead_in/checked*100:.1f}%) failed: bearish lead-in trend (need bullish/neutral)")
+                logger.info(f"         ↳ {failed_lead_in} ({failed_lead_in/checked*100:.1f}%) failed: bearish lead-in trend")
             if failed_neckline > 0:
                 logger.info(f"         ↳ {failed_neckline} ({failed_neckline/checked*100:.1f}%) failed: no clear neckline resistance (need {min_touches} touches)")
             if failed_trendline > 0:
-                logger.info(f"         ↳ {failed_trendline} ({failed_trendline/checked*100:.1f}%) failed: no ascending support trendline")
+                logger.info(f"         ↳ {failed_trendline} ({failed_trendline/checked*100:.1f}%) failed: no {trendline_desc} support trendline")
             if failed_convergence > 0:
                 logger.info(f"         ↳ {failed_convergence} ({failed_convergence/checked*100:.1f}%) failed: triangle not converging")
             if failed_breakout > 0:
@@ -387,8 +390,9 @@ class FOOSPatternDetector:
         # Find the highest point in the range
         max_high = highs.max()
 
-        # Count touches within 0.5% of max_high
-        threshold = max_high * 0.005
+        # Count touches within threshold of max_high (relaxed: 2%, strict: 0.5%)
+        threshold_pct = 0.02 if self.relaxed_mode else 0.005
+        threshold = max_high * threshold_pct
         touches = []
 
         for i, high in enumerate(highs):
@@ -477,8 +481,9 @@ class FOOSPatternDetector:
         for i in range(consolidation_end, search_end):
             candle = df.iloc[i]
 
-            # Check if price broke above neckline
-            if candle['close'] > neckline * 1.002:  # 0.2% above neckline
+            # Check if price broke above neckline (relaxed: 0.1%, strict: 0.2%)
+            breakout_pct = 1.001 if self.relaxed_mode else 1.002
+            if candle['close'] > neckline * breakout_pct:
                 # Check for volume spike
                 avg_volume = df['volume'].iloc[max(0, i-20):i].mean()
                 current_volume = candle['volume']
