@@ -382,19 +382,32 @@ def api_analyze(symbol):
         all_patterns = []
         timeframes_to_scan = ['1h', '4h', '1d', '1w']
 
+        # Dynamic lookback period based on timeframe (need 100+ candles minimum)
+        timeframe_lookback = {
+            '1h': 60,    # 60 days = 1440 candles
+            '4h': 90,    # 90 days = 540 candles
+            '1d': 365,   # 365 days = 365 candles
+            '1w': 730    # 730 days = ~104 candles
+        }
+
         for tf in timeframes_to_scan:
             try:
+                lookback_days = timeframe_lookback.get(tf, 90)
+
                 # Fetch data for this timeframe
-                if historical_manager and tf != timeframe:  # Use already loaded df for current timeframe
-                    tf_end_time = datetime.now()
-                    tf_start_time = tf_end_time - timedelta(days=30)
-                    tf_df = historical_manager.db.get_ohlcv(symbol, tf, tf_start_time, tf_end_time)
-                    if tf_df.empty:
-                        tf_df = market_data.get_ohlcv(symbol, timeframe=tf, limit=500)
-                elif tf == timeframe:
-                    tf_df = df  # Use already loaded data
+                if tf == timeframe:
+                    # Use already loaded data for current timeframe
+                    tf_df = df
+                    log_activity(f"  {tf.upper()}: Using current data ({len(tf_df)} candles)")
+                elif historical_manager:
+                    # Use historical manager to ensure data is available
+                    log_activity(f"  {tf.upper()}: Ensuring {lookback_days} days of historical data...")
+                    tf_df = historical_manager.ensure_data(symbol, tf, lookback_days)
+                    log_activity(f"  {tf.upper()}: Loaded {len(tf_df)} candles")
                 else:
+                    # Fallback to API if no historical manager
                     tf_df = market_data.get_ohlcv(symbol, timeframe=tf, limit=500)
+                    log_activity(f"  {tf.upper()}: Fetched {len(tf_df)} candles from API")
 
                 if not tf_df.empty:
                     tf_patterns = foos_detector.detect_patterns(tf_df, symbol)

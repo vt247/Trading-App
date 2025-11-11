@@ -139,7 +139,11 @@ class FOOSPatternDetector:
 
         # Need sufficient data
         if len(df) < 100:
+            print(f"      ⚠️  Insufficient data for FORCE detection: {len(df)} candles (need 100+)")
             return patterns
+
+        print(f"      📊 FORCE detection starting with {len(df)} candles")
+        print(f"      📊 Scanning range: index 50 to {len(df) - 20} ({len(df) - 70} windows)")
 
         # Calculate indicators
         ema_13 = self.indicators.calculate_ema_13(df)
@@ -295,21 +299,29 @@ class FOOSPatternDetector:
             # Skip ahead to avoid overlapping patterns
             i = breakout_idx + 10
 
-        # Print debug summary
+        # Print debug summary - ALWAYS print this
+        print(f"      📊 FORCE scan summary:")
+        print(f"         Windows checked: {checked}")
+        print(f"         Patterns found: {len(patterns)}")
+
         if checked > 0:
-            print(f"    FORCE scan summary ({checked} windows checked):")
+            total_failed = failed_lead_in + failed_neckline + failed_trendline + failed_convergence + failed_breakout + failed_risk_reward
+            print(f"         Total failed: {total_failed}")
+
             if failed_lead_in > 0:
-                print(f"      - {failed_lead_in} failed: bearish lead-in trend (need bullish/neutral)")
+                print(f"         ↳ {failed_lead_in} ({failed_lead_in/checked*100:.1f}%) failed: bearish lead-in trend (need bullish/neutral)")
             if failed_neckline > 0:
-                print(f"      - {failed_neckline} failed: no clear neckline resistance")
+                print(f"         ↳ {failed_neckline} ({failed_neckline/checked*100:.1f}%) failed: no clear neckline resistance (need 2+ touches)")
             if failed_trendline > 0:
-                print(f"      - {failed_trendline} failed: no ascending support trendline")
+                print(f"         ↳ {failed_trendline} ({failed_trendline/checked*100:.1f}%) failed: no ascending support trendline")
             if failed_convergence > 0:
-                print(f"      - {failed_convergence} failed: triangle not converging")
+                print(f"         ↳ {failed_convergence} ({failed_convergence/checked*100:.1f}%) failed: triangle not converging")
             if failed_breakout > 0:
-                print(f"      - {failed_breakout} failed: no breakout above neckline")
+                print(f"         ↳ {failed_breakout} ({failed_breakout/checked*100:.1f}%) failed: no breakout above neckline")
             if failed_risk_reward > 0:
-                print(f"      - {failed_risk_reward} failed: risk/reward < 2:1")
+                print(f"         ↳ {failed_risk_reward} ({failed_risk_reward/checked*100:.1f}%) failed: risk/reward < 2:1")
+        else:
+            print(f"         ⚠️  No windows were checked!")
 
         return patterns
 
