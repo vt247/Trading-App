@@ -155,7 +155,7 @@ class FOOSPatternDetector:
         logger.info(f"      📊 Scanning range: index 50 to {len(df) - 20} ({len(df) - 70} windows)")
 
         if self.relaxed_mode:
-            logger.info(f"      🔓 ULTRA RELAXED: neckline (2%) + breakout only, NO trendline/convergence required")
+            logger.info(f"      🔓 ULTRA RELAXED: neckline (2%) + ANY close above neckline in 50 candles, NO trendline required")
 
         # Calculate indicators
         ema_13 = self.indicators.calculate_ema_13(df)
@@ -477,14 +477,15 @@ class FOOSPatternDetector:
         Returns:
             (breakout_index, confirmed, volume_spike) or None
         """
-        # Look at next 20 candles for breakout
-        search_end = min(consolidation_end + 20, len(df))
+        # Look at next candles for breakout (relaxed: 50, strict: 20)
+        search_window = 50 if self.relaxed_mode else 20
+        search_end = min(consolidation_end + search_window, len(df))
 
         for i in range(consolidation_end, search_end):
             candle = df.iloc[i]
 
-            # Check if price broke above neckline (relaxed: 0.1%, strict: 0.2%)
-            breakout_pct = 1.001 if self.relaxed_mode else 1.002
+            # Check if price broke above neckline (relaxed: 0%, strict: 0.2%)
+            breakout_pct = 1.0 if self.relaxed_mode else 1.002
             if candle['close'] > neckline * breakout_pct:
                 # Check for volume spike
                 avg_volume = df['volume'].iloc[max(0, i-20):i].mean()
@@ -492,9 +493,12 @@ class FOOSPatternDetector:
                 volume_spike = current_volume > avg_volume * 1.3
 
                 # Breakout confirmed if:
-                # 1. Close above neckline
-                # 2. (Ideally) volume spike present
-                confirmed = volume_spike or (not volume_was_decreasing)
+                # Relaxed: Always confirmed (no volume requirement)
+                # Strict: Volume spike or volume wasn't decreasing
+                if self.relaxed_mode:
+                    confirmed = True
+                else:
+                    confirmed = volume_spike or (not volume_was_decreasing)
 
                 return (i, confirmed, volume_spike)
 
