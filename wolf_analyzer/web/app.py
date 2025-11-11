@@ -433,17 +433,8 @@ def api_chart(symbol):
                 hline_styles.append('-')
                 hline_widths.append(2)
 
-        # Create hlines dict in the format mplfinance expects
-        hlines_dict = None
-        if hline_values:
-            hlines_dict = dict(
-                hlines=hline_values,
-                colors=hline_colors,
-                linestyles=hline_styles,
-                linewidths=hline_widths
-            )
-
-        # Create chart
+        # Create chart without hlines first (mplfinance hlines are problematic)
+        # We'll draw lines manually on the axes instead
         fig, axes = mpf.plot(
             df,
             type='candle',
@@ -451,11 +442,23 @@ def api_chart(symbol):
             title=f'{symbol} - {timeframe.upper()}',
             ylabel='Price (USDT)',
             volume=True,
-            hlines=hlines_dict,
             returnfig=True,
             figsize=(12, 6),
             tight_layout=True
         )
+
+        # Draw horizontal lines manually on the price axis (more reliable)
+        if hline_values:
+            ax = axes[0]  # Price axis
+            for i, y_val in enumerate(hline_values):
+                ax.axhline(
+                    y=y_val,
+                    color=hline_colors[i],
+                    linestyle=hline_styles[i],
+                    linewidth=hline_widths[i],
+                    alpha=0.7,
+                    zorder=3
+                )
 
         # Save to bytes buffer
         buf = io.BytesIO()
