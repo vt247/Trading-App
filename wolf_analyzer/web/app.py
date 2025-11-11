@@ -5,7 +5,7 @@ Flask-based web interface for market analysis
 
 from flask import Flask, render_template, jsonify, request, send_file
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 import os
 import traceback
@@ -298,7 +298,9 @@ def api_analyze(symbol):
                 # Ensure we have recent data (last 30 days is enough for analysis)
                 historical_manager.ensure_data(symbol, timeframe, lookback_days=30)
                 # Get last 500 candles from database
-                df = historical_manager.db.get_ohlcv(symbol, timeframe, lookback_days=30)
+                end_time = datetime.now()
+                start_time = end_time - timedelta(days=30)
+                df = historical_manager.db.get_ohlcv(symbol, timeframe, start_time, end_time)
                 if not df.empty:
                     df = df.tail(500)  # Use last 500 candles
                     log_activity(f"✓ Using historical data for {symbol} ({len(df)} candles)")
@@ -669,7 +671,9 @@ def api_chart_data(symbol):
         historical_manager.ensure_data(symbol, timeframe, lookback_days=730)
 
         # Fetch all available data from database
-        df = historical_manager.db.get_ohlcv(symbol, timeframe, lookback_days=730)
+        end_time = datetime.now()
+        start_time = end_time - timedelta(days=730)
+        df = historical_manager.db.get_ohlcv(symbol, timeframe, start_time, end_time)
 
         if df.empty:
             return jsonify({'success': False, 'error': 'No data available'}), 404
