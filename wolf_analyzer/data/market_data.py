@@ -13,6 +13,7 @@ import threading
 from collections import defaultdict
 
 from wolf_analyzer.core.config import Config
+from wolf_analyzer.data.websocket_manager import BinanceWebSocketManager
 
 
 class MarketDataConnector:
@@ -28,15 +29,30 @@ class MarketDataConnector:
     _last_request_time = 0
     _min_request_interval = 1.2  # Minimum seconds between requests
 
-    def __init__(self, exchange_name: str = "binance"):
+    def __init__(self, exchange_name: str = "binance", use_websocket: bool = True):
         """
         Initialize market data connector
 
         Args:
             exchange_name: Name of exchange (default: binance)
+            use_websocket: Enable WebSocket for real-time data (default: True)
         """
         self.exchange_name = exchange_name
         self.exchange = self._initialize_exchange()
+        self.use_websocket = use_websocket
+
+        # Initialize WebSocket manager for Binance
+        self.ws_manager = None
+        if use_websocket and exchange_name == "binance":
+            try:
+                self.ws_manager = BinanceWebSocketManager()
+                print("✓ WebSocket manager initialized")
+
+                # Subscribe to watchlist symbols
+                self._subscribe_to_watchlist()
+            except Exception as e:
+                print(f"⚠️  WebSocket initialization failed: {e}")
+                self.ws_manager = None
 
     def _initialize_exchange(self) -> ccxt.Exchange:
         """Initialize and configure exchange connection"""
@@ -67,6 +83,28 @@ class MarketDataConnector:
             # Return basic exchange instance
             exchange_class = getattr(ccxt, self.exchange_name)
             return exchange_class({'enableRateLimit': True})
+
+    def _subscribe_to_watchlist(self):
+        """Subscribe to WebSocket streams for watchlist symbols"""
+        if not self.ws_manager:
+            return
+
+        try:
+            watchlist = Config.get_watchlist()
+            print(f"Subscribing to WebSocket streams for {len(watchlist)} symbols...")
+
+            for symbol in watchlist:
+                try:
+                    # Subscribe to ticker stream (real-time price updates)
+                    self.ws_manager.subscribe_ticker(symbol)
+                    time.sleep(0.1)  # Small delay between subscriptions
+                except Exception as e:
+                    print(f"⚠️  Failed to subscribe to {symbol}: {e}")
+
+            print(f"✓ Subscribed to {len(watchlist)} ticker streams")
+
+        except Exception as e:
+            print(f"⚠️  Error subscribing to watchlist: {e}")
 
     def _get_cache_key(self, symbol: str, timeframe: str, limit: int) -> str:
         """Generate cache key for request"""
@@ -211,7 +249,7 @@ class MarketDataConnector:
 
     def get_current_price(self, symbol: str) -> Optional[float]:
         """
-        Get current market price for a symbol
+        Get current market price for a symbol (WebSocket first, REST fallback)
 
         Args:
             symbol: Trading pair (e.g., 'BTC/USDT')
@@ -219,6 +257,14 @@ class MarketDataConnector:
         Returns:
             Current price or None if error
         """
+        # Try WebSocket first
+        if self.ws_manager:
+            ws_data = self.ws_manager.get_cached_ticker(symbol)
+            if ws_data and 'price' in ws_data:
+                print(f"🔌 Using WebSocket price for {symbol}")
+                return ws_data['price']
+
+        # Fallback to REST API
         try:
             def fetch():
                 return self.exchange.fetch_ticker(symbol)
@@ -231,7 +277,7 @@ class MarketDataConnector:
 
     def get_ticker_info(self, symbol: str) -> Dict[str, Any]:
         """
-        Get comprehensive ticker information
+        Get comprehensive ticker information (WebSocket first, REST fallback)
 
         Args:
             symbol: Trading pair
@@ -239,6 +285,14 @@ class MarketDataConnector:
         Returns:
             Dictionary with ticker data
         """
+        # Try WebSocket first
+        if self.ws_manager:
+            ws_data = self.ws_manager.get_cached_ticker(symbol)
+            if ws_data:
+                print(f"🔌 Using WebSocket ticker for {symbol}")
+                return ws_data
+
+        # Fallback to REST API
         try:
             def fetch():
                 return self.exchange.fetch_ticker(symbol)
@@ -440,6 +494,15 @@ class MarketDataConnector:
         typical_price = (df['high'] + df['low'] + df['close']) / 3
         vwap = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
         return vwap
+
+    def __del__(self):
+        """Cleanup WebSocket connections on deletion"""
+        if hasattr(self, 'ws_manager') and self.ws_manager:
+            try:
+                self.ws_manager.unsubscribe_all()
+                print("✓ WebSocket connections closed")
+            except:
+                pass
 
 
 # Example usage and testing
