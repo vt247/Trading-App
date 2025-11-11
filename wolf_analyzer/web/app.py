@@ -740,12 +740,19 @@ def api_chart_data(symbol):
         if not foos_detector:
             raise Exception("FOOSPatternDetector not initialized")
 
-        # Ensure we have 2 years of historical data
-        historical_manager.ensure_data(symbol, timeframe, lookback_days=730)
+        # Ensure we have historical data (timeframe-appropriate lookback)
+        timeframe_lookback = {
+            '1h': 60,    # 60 days = 1440 candles
+            '4h': 90,    # 90 days = 540 candles
+            '1d': 365,   # 365 days = 365 candles
+            '1w': 730    # 730 days = ~104 candles
+        }
+        lookback_days = timeframe_lookback.get(timeframe, 90)
+        historical_manager.ensure_data(symbol, timeframe, lookback_days=lookback_days)
 
         # Fetch all available data from database
         end_time = datetime.now()
-        start_time = end_time - timedelta(days=730)
+        start_time = end_time - timedelta(days=lookback_days)
         df = historical_manager.db.get_ohlcv(symbol, timeframe, start_time, end_time)
 
         if df.empty:
