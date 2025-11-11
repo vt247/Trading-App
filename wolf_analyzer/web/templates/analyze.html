@@ -2,6 +2,11 @@
 
 {% block title %}Analyze {{ symbol }} - Wolf Market Analyzer{% endblock %}
 
+{% block extra_css %}
+<!-- Lightweight Charts Library -->
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="mb-3">
     <a href="/" class="btn" style="background-color: var(--card-bg);">← Back to Dashboard</a>
@@ -33,9 +38,10 @@
 <!-- Price Chart -->
 <div class="card mb-3">
     <div class="card-header">
-        <h2 class="card-title">📊 Price Chart</h2>
+        <h2 class="card-title">📊 Price Chart (2 Years - Interactive)</h2>
+        <small style="color: var(--text-muted);">Scroll to zoom, drag to pan</small>
     </div>
-    <div id="chart-container" style="text-align: center; padding: 1rem;">
+    <div id="chart-container" style="height: 600px; position: relative; padding: 0;">
         <div class="loading">
             <div class="spinner"></div>
             <p>Loading chart...</p>
@@ -71,6 +77,11 @@
 
 <script>
 const symbol = "{{ symbol }}";
+let chart = null;  // Global chart instance
+let candlestickSeries = null;
+let ema13Series = null;
+let ma50Series = null;
+let ma200Series = null;
 
 async function loadAnalysis() {
     const timeframe = document.getElementById('timeframe-select').value;
@@ -116,7 +127,9 @@ async function loadAnalysis() {
 
 async function loadChart(timeframe) {
     try {
-        const response = await fetch(`/api/chart/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+        showLoading('chart-container');
+
+        const response = await fetch(`/api/chart_data/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
         const data = await response.json();
 
         if (!data.success) {
@@ -124,9 +137,171 @@ async function loadChart(timeframe) {
             return;
         }
 
-        // Display chart image
+        // Clear container and create chart
         const container = document.getElementById('chart-container');
-        container.innerHTML = `<img src="${data.image}" alt="Price Chart" style="max-width: 100%; height: auto; border-radius: 8px;">`;
+        container.innerHTML = '';  // Clear loading spinner
+
+        // Destroy old chart if exists
+        if (chart) {
+            chart.remove();
+        }
+
+        // Create new chart with FOOS dark theme
+        chart = LightweightCharts.createChart(container, {
+            width: container.clientWidth,
+            height: 600,
+            layout: {
+                background: { color: '#1a1a2e' },
+                textColor: '#d1d4dc',
+            },
+            grid: {
+                vertLines: { color: '#2a2a3e' },
+                horzLines: { color: '#2a2a3e' },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: '#2a2a3e',
+            },
+            timeScale: {
+                borderColor: '#2a2a3e',
+                timeVisible: true,
+                secondsVisible: false,
+            },
+        });
+
+        // Add candlestick series (FOOS style: white up, red down)
+        candlestickSeries = chart.addCandlestickSeries({
+            upColor: '#ffffff',
+            downColor: '#ef5350',
+            borderUpColor: '#ffffff',
+            borderDownColor: '#ef5350',
+            wickUpColor: '#ffffff',
+            wickDownColor: '#ef5350',
+        });
+        candlestickSeries.setData(data.candlestick);
+
+        // Add FOOS indicators
+        // 13 EMA (Yellow - Primary trend)
+        ema13Series = chart.addLineSeries({
+            color: '#FFD700',
+            lineWidth: 2,
+            title: '13 EMA',
+        });
+        ema13Series.setData(data.indicators.ema_13);
+
+        // 50 MA (Pink - Breakdown warning)
+        ma50Series = chart.addLineSeries({
+            color: '#FF69B4',
+            lineWidth: 2,
+            title: '50 MA',
+        });
+        ma50Series.setData(data.indicators.ma_50);
+
+        // 200 MA (Blue - Long-term trend)
+        ma200Series = chart.addLineSeries({
+            color: '#00BFFF',
+            lineWidth: 2,
+            title: '200 MA',
+        });
+        ma200Series.setData(data.indicators.ma_200);
+
+        // Draw FOOS patterns (if detected)
+        if (data.patterns && data.patterns.length > 0) {
+            data.patterns.forEach(pattern => {
+                // Neckline (Red horizontal line - Resistance)
+                const necklineSeries = chart.addLineSeries({
+                    color: '#EF5350',
+                    lineWidth: 2.5,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    title: 'Neckline',
+                });
+                necklineSeries.setData([
+                    { time: pattern.neckline.start_time, value: pattern.neckline.price },
+                    { time: pattern.neckline.end_time, value: pattern.neckline.price }
+                ]);
+
+                // Ascending Trendline (Green rising line - Support)
+                const trendlineSeries = chart.addLineSeries({
+                    color: '#26a69a',
+                    lineWidth: 2.5,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    title: 'Trendline',
+                });
+                trendlineSeries.setData([
+                    { time: pattern.trendline.start_time, value: pattern.trendline.start_price },
+                    { time: pattern.trendline.end_time, value: pattern.trendline.end_price }
+                ]);
+
+                // Entry Zone (Orange)
+                const entryHighSeries = chart.addLineSeries({
+                    color: '#FFA726',
+                    lineWidth: 1.5,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    title: 'Entry High',
+                });
+                const currentTime = data.candlestick[data.candlestick.length - 1].time;
+                entryHighSeries.setData([
+                    { time: pattern.neckline.end_time, value: pattern.entry_high },
+                    { time: currentTime, value: pattern.entry_high }
+                ]);
+
+                // Stop Loss (Red)
+                const stopLossSeries = chart.addLineSeries({
+                    color: '#EF5350',
+                    lineWidth: 3,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    title: 'Stop Loss',
+                });
+                stopLossSeries.setData([
+                    { time: pattern.neckline.end_time, value: pattern.stop_loss },
+                    { time: currentTime, value: pattern.stop_loss }
+                ]);
+
+                // Targets (Green)
+                const target1Series = chart.addLineSeries({
+                    color: '#66BB6A',
+                    lineWidth: 3,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    title: 'Target 1',
+                });
+                target1Series.setData([
+                    { time: pattern.neckline.end_time, value: pattern.target_1 },
+                    { time: currentTime, value: pattern.target_1 }
+                ]);
+
+                const target2Series = chart.addLineSeries({
+                    color: '#66BB6A',
+                    lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    title: 'Target 2',
+                });
+                target2Series.setData([
+                    { time: pattern.neckline.end_time, value: pattern.target_2 },
+                    { time: currentTime, value: pattern.target_2 }
+                ]);
+
+                const target3Series = chart.addLineSeries({
+                    color: '#66BB6A',
+                    lineWidth: 1.5,
+                    lineStyle: LightweightCharts.LineStyle.Dotted,
+                    title: 'Target 3',
+                });
+                target3Series.setData([
+                    { time: pattern.neckline.end_time, value: pattern.target_3 },
+                    { time: currentTime, value: pattern.target_3 }
+                ]);
+            });
+        }
+
+        // Fit content to show all data
+        chart.timeScale().fitContent();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            chart.applyOptions({ width: container.clientWidth });
+        });
 
     } catch (error) {
         console.error('Chart error:', error);

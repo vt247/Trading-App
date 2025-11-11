@@ -14,6 +14,7 @@ import io
 import base64
 import logging
 from logging.handlers import RotatingFileHandler
+import pandas as pd
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for Render
 import matplotlib.pyplot as plt
@@ -602,6 +603,140 @@ def api_chart(symbol):
 
     except Exception as e:
         log_error(e, f"api_chart({symbol})")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'type': type(e).__name__
+        }), 500
+
+
+@app.route('/api/chart_data/<path:symbol>')
+def api_chart_data(symbol):
+    """Get 2 years of historical data for interactive chart"""
+    try:
+        timeframe = request.args.get('timeframe', '4h')
+        log_activity(f"Fetching chart data for {symbol} ({timeframe}) - 2 years")
+
+        if not market_data:
+            raise Exception("MarketDataConnector not initialized")
+        if not historical_manager:
+            raise Exception("HistoricalDataManager not initialized")
+        if not indicators:
+            raise Exception("TechnicalIndicators not initialized")
+        if not foos_detector:
+            raise Exception("FOOSPatternDetector not initialized")
+
+        # Ensure we have 2 years of historical data
+        historical_manager.ensure_data(symbol, timeframe, lookback_days=730)
+
+        # Fetch all available data from database
+        df = historical_manager.db.get_ohlcv(symbol, timeframe, lookback_days=730)
+
+        if df.empty:
+            return jsonify({'success': False, 'error': 'No data available'}), 404
+
+        # Calculate FOOS indicators
+        foos_indicators = indicators.calculate_foos_indicators(df)
+        ema_13 = foos_indicators['ema_13']
+        ma_50 = foos_indicators['ma_50']
+        ma_200 = foos_indicators['ma_200']
+
+        # Detect FOOS patterns
+        foos_patterns = foos_detector.detect_patterns(df, symbol)
+
+        # Format data for Lightweight Charts
+        candlestick_data = []
+        ema13_data = []
+        ma50_data = []
+        ma200_data = []
+
+        for idx in range(len(df)):
+            row = df.iloc[idx]
+            timestamp = int(df.index[idx].timestamp())  # Unix timestamp in seconds
+
+            candlestick_data.append({
+                'time': timestamp,
+                'open': float(row['open']),
+                'high': float(row['high']),
+                'low': float(row['low']),
+                'close': float(row['close']),
+                'volume': float(row['volume'])
+            })
+
+            # Add indicators (skip NaN values)
+            if not pd.isna(ema_13.iloc[idx]):
+                ema13_data.append({
+                    'time': timestamp,
+                    'value': float(ema_13.iloc[idx])
+                })
+
+            if not pd.isna(ma_50.iloc[idx]):
+                ma50_data.append({
+                    'time': timestamp,
+                    'value': float(ma_50.iloc[idx])
+                })
+
+            if not pd.isna(ma_200.iloc[idx]):
+                ma200_data.append({
+                    'time': timestamp,
+                    'value': float(ma_200.iloc[idx])
+                })
+
+        # Format patterns for drawing
+        patterns_data = []
+        for pattern in foos_patterns:
+            # Get timestamps for pattern coordinates
+            neckline_start_ts = int(df.index[pattern.neckline_start_idx].timestamp())
+            neckline_end_ts = int(df.index[pattern.neckline_end_idx].timestamp())
+            trendline_start_ts = int(df.index[pattern.trendline_start_idx].timestamp())
+            trendline_end_ts = int(df.index[pattern.trendline_end_idx].timestamp())
+
+            # Calculate trendline prices
+            trendline_start_price = float(df.iloc[pattern.trendline_start_idx]['low'])
+            trendline_end_price = trendline_start_price + (pattern.trendline_slope * (pattern.trendline_end_idx - pattern.trendline_start_idx))
+
+            patterns_data.append({
+                'type': str(pattern.pattern_type),
+                'confidence': float(pattern.confidence),
+                'neckline': {
+                    'start_time': neckline_start_ts,
+                    'end_time': neckline_end_ts,
+                    'price': float(pattern.neckline_price)
+                },
+                'trendline': {
+                    'start_time': trendline_start_ts,
+                    'end_time': trendline_end_ts,
+                    'start_price': trendline_start_price,
+                    'end_price': float(trendline_end_price)
+                },
+                'entry_high': float(pattern.entry_high),
+                'entry_low': float(pattern.entry_low),
+                'stop_loss': float(pattern.stop_loss),
+                'target_1': float(pattern.target_1),
+                'target_2': float(pattern.target_2),
+                'target_3': float(pattern.target_3),
+                'description': str(pattern.description),
+                'lead_in_trend': str(pattern.lead_in_trend),
+                'consolidation_days': int(pattern.consolidation_days),
+                'risk_reward': float(pattern.risk_reward)
+            })
+
+        return jsonify({
+            'success': True,
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'candlestick': candlestick_data,
+            'indicators': {
+                'ema_13': ema13_data,
+                'ma_50': ma50_data,
+                'ma_200': ma200_data
+            },
+            'patterns': patterns_data,
+            'timestamp': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        log_error(e, f"api_chart_data({symbol})")
         return jsonify({
             'success': False,
             'error': str(e),
