@@ -96,8 +96,8 @@ async function loadAnalysis() {
         // Display price info
         displayPriceInfo(data);
 
-        // Display indicators
-        displayIndicators(data.indicators);
+        // Display indicators (pass both FOOS and traditional)
+        displayIndicators(data.foos_indicators, data.traditional_indicators || data.indicators);
 
         // Display patterns
         displayPatterns(data.patterns);
@@ -138,6 +138,9 @@ function displayPriceInfo(data) {
     const container = document.getElementById('price-info');
     const changeClass = data.change_24h >= 0 ? 'positive' : 'negative';
 
+    // Get trend from FOOS indicators or fallback to traditional
+    const trend = data.foos_indicators?.price_position?.trend || data.indicators?.trend || 'neutral';
+
     container.innerHTML = `
         <div>
             <p class="level-label">Current Price</p>
@@ -153,56 +156,87 @@ function displayPriceInfo(data) {
         </div>
         <div>
             <p class="level-label">Trend</p>
-            <p class="stat-value">${getTrendEmoji(data.indicators.trend)} ${data.indicators.trend.toUpperCase()}</p>
+            <p class="stat-value">${getTrendEmoji(trend)} ${trend.toUpperCase()}</p>
         </div>
     `;
 }
 
-function displayIndicators(indicators) {
+function displayIndicators(foosIndicators, traditionalIndicators) {
     const container = document.getElementById('indicators-container');
 
-    // RSI signal
-    let rsiSignal = 'neutral';
-    let rsiText = 'Neutral';
-    if (indicators.rsi < 30) {
-        rsiSignal = 'bullish';
-        rsiText = 'Oversold';
-    } else if (indicators.rsi > 70) {
-        rsiSignal = 'bearish';
-        rsiText = 'Overbought';
+    let html = '<div class="indicator-grid">';
+
+    // FOOS Indicators (if available)
+    if (foosIndicators) {
+        // 13 EMA Position
+        const ema13Signal = foosIndicators.price_position?.ema_13 === 'above' ? 'bullish' : 'bearish';
+        const ema13Text = foosIndicators.price_position?.ema_13 === 'above' ? 'Above (Bullish)' : 'Below (Bearish)';
+        html += `
+            <div class="indicator-item">
+                <div class="indicator-name">🟡 13 EMA Position</div>
+                <div class="indicator-value">${formatCurrency(foosIndicators.ema_13)}</div>
+                <div class="indicator-signal ${ema13Signal}">${ema13Text}</div>
+            </div>
+        `;
+
+        // 50 MA Position
+        const ma50Signal = foosIndicators.price_position?.ma_50 === 'above' ? 'bullish' : 'bearish';
+        const ma50Text = foosIndicators.price_position?.ma_50 === 'above' ? 'Above' : 'Below (Warning)';
+        html += `
+            <div class="indicator-item">
+                <div class="indicator-name">🩷 50 MA Position</div>
+                <div class="indicator-value">${formatCurrency(foosIndicators.ma_50)}</div>
+                <div class="indicator-signal ${ma50Signal}">${ma50Text}</div>
+            </div>
+        `;
+
+        // 200 MA Position
+        const ma200Signal = foosIndicators.price_position?.ma_200 === 'above' ? 'bullish' : 'bearish';
+        const ma200Text = foosIndicators.price_position?.ma_200 === 'above' ? 'Bull Market' : 'Bear Market';
+        html += `
+            <div class="indicator-item">
+                <div class="indicator-name">🔵 200 MA Position</div>
+                <div class="indicator-value">${formatCurrency(foosIndicators.ma_200)}</div>
+                <div class="indicator-signal ${ma200Signal}">${ma200Text}</div>
+            </div>
+        `;
     }
 
-    // MACD signal
-    const macdSignal = indicators.macd_histogram > 0 ? 'bullish' : 'bearish';
-    const macdText = indicators.macd_histogram > 0 ? 'Bullish' : 'Bearish';
+    // Traditional indicators (if available)
+    if (traditionalIndicators) {
+        // RSI signal
+        let rsiSignal = 'neutral';
+        let rsiText = 'Neutral';
+        if (traditionalIndicators.rsi < 30) {
+            rsiSignal = 'bullish';
+            rsiText = 'Oversold';
+        } else if (traditionalIndicators.rsi > 70) {
+            rsiSignal = 'bearish';
+            rsiText = 'Overbought';
+        }
 
-    container.innerHTML = `
-        <div class="indicator-grid">
+        html += `
             <div class="indicator-item">
                 <div class="indicator-name">RSI (14)</div>
-                <div class="indicator-value">${indicators.rsi.toFixed(2)}</div>
+                <div class="indicator-value">${traditionalIndicators.rsi.toFixed(2)}</div>
                 <div class="indicator-signal ${rsiSignal}">${rsiText}</div>
             </div>
+        `;
 
+        // MACD signal
+        const macdSignal = traditionalIndicators.macd_histogram > 0 ? 'bullish' : 'bearish';
+        const macdText = traditionalIndicators.macd_histogram > 0 ? 'Bullish' : 'Bearish';
+        html += `
             <div class="indicator-item">
                 <div class="indicator-name">MACD</div>
-                <div class="indicator-value">${indicators.macd.toFixed(2)}</div>
+                <div class="indicator-value">${traditionalIndicators.macd.toFixed(2)}</div>
                 <div class="indicator-signal ${macdSignal}">${macdText}</div>
             </div>
+        `;
+    }
 
-            <div class="indicator-item">
-                <div class="indicator-name">Support</div>
-                <div class="indicator-value">${indicators.support.length}</div>
-                <div class="indicator-signal neutral">${indicators.support.map(s => formatCurrency(s)).join(', ')}</div>
-            </div>
-
-            <div class="indicator-item">
-                <div class="indicator-name">Resistance</div>
-                <div class="indicator-value">${indicators.resistance.length}</div>
-                <div class="indicator-signal neutral">${indicators.resistance.map(r => formatCurrency(r)).join(', ')}</div>
-            </div>
-        </div>
-    `;
+    html += '</div>';
+    container.innerHTML = html;
 }
 
 function displayPatterns(patterns) {
@@ -212,9 +246,9 @@ function displayPatterns(patterns) {
         container.innerHTML = `
             <div class="text-center">
                 <p style="color: var(--text-muted); padding: 2rem;">
-                    ⚠️ No high-confidence patterns detected at this time.
+                    ⚠️ No FOOS patterns detected at this time.
                     <br>
-                    <small>This is normal - not all market conditions show clear patterns.</small>
+                    <small>FORCE patterns require specific triangle consolidation conditions with 65%+ confidence.</small>
                 </p>
             </div>
         `;
@@ -224,12 +258,20 @@ function displayPatterns(patterns) {
     let html = '';
 
     patterns.forEach((pattern, index) => {
-        const badgeClass = pattern.type.includes('Ascending') || pattern.type.includes('Resistance Break') ? 'bullish' : 'bearish';
+        // FOOS patterns are always bullish (FORCE, SURVIVAL, REVIVAL, GOLD)
+        const badgeClass = 'bullish';
+
+        // Get pattern emoji
+        let patternEmoji = '🎯';
+        if (pattern.pattern_type === 'FORCE') patternEmoji = '⚡';
+        else if (pattern.pattern_type === 'SURVIVAL') patternEmoji = '💪';
+        else if (pattern.pattern_type === 'REVIVAL') patternEmoji = '🔄';
+        else if (pattern.pattern_type === 'GOLD') patternEmoji = '🏆';
 
         html += `
             <div class="pattern-detail">
                 <div class="pattern-header">
-                    <h3 class="card-title">${pattern.type}</h3>
+                    <h3 class="card-title">${patternEmoji} ${pattern.pattern_type} Pattern</h3>
                     <span class="confidence-badge">${(pattern.confidence * 100).toFixed(0)}% Confidence</span>
                 </div>
 
@@ -238,8 +280,8 @@ function displayPatterns(patterns) {
                 <div class="pattern-levels">
                     <div class="level-item">
                         <div class="level-label">📍 Entry Zone</div>
-                        <div class="level-value">${formatCurrency(pattern.entry_zone[0])}</div>
-                        <div class="level-value">${formatCurrency(pattern.entry_zone[1])}</div>
+                        <div class="level-value">${formatCurrency(pattern.entry_low)}</div>
+                        <div class="level-value">${formatCurrency(pattern.entry_high)}</div>
                     </div>
 
                     <div class="level-item">
@@ -249,7 +291,17 @@ function displayPatterns(patterns) {
 
                     <div class="level-item">
                         <div class="level-label">🎯 Target 1</div>
-                        <div class="level-value">${formatCurrency(pattern.targets[0])}</div>
+                        <div class="level-value">${formatCurrency(pattern.target_1)}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">🎯 Target 2</div>
+                        <div class="level-value">${formatCurrency(pattern.target_2)}</div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-label">🎯 Target 3</div>
+                        <div class="level-value">${formatCurrency(pattern.target_3)}</div>
                     </div>
 
                     <div class="level-item">
@@ -260,12 +312,20 @@ function displayPatterns(patterns) {
 
                 <div class="mt-2">
                     <span class="pattern-badge ${badgeClass}">
-                        ${pattern.volume_confirmation ? '✓' : '✗'} Volume
+                        ${pattern.volume_spike_confirmed ? '✓' : '✗'} Volume Spike
                     </span>
                     <span class="pattern-badge ${badgeClass}">
-                        ${pattern.institutional_signal ? '✓' : '✗'} Institutional
+                        📈 ${pattern.lead_in_trend.toUpperCase()} Lead-in
+                    </span>
+                    <span class="pattern-badge ${badgeClass}">
+                        ⏱️ ${pattern.consolidation_days} candles
+                    </span>
+                    <span class="pattern-badge ${badgeClass}">
+                        ${pattern.ema_13_position === 'above' ? '🟡✓' : '🟡✗'} 13 EMA
                     </span>
                 </div>
+
+                ${pattern.notes ? `<p class="mt-2" style="color: var(--text-muted); font-size: 0.9rem;">💡 ${pattern.notes}</p>` : ''}
             </div>
         `;
     });
