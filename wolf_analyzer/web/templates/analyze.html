@@ -485,11 +485,9 @@ function displayPatterns(currentPatterns, historicalPatterns) {
             const card = document.getElementById(`pattern-historical-${index}`);
             if (card) {
                 card.style.cursor = 'pointer';
-                card.addEventListener('click', async (event) => {
-                    console.log('Pattern clicked:', pattern);
-                    // Store pattern ID for highlighting
-                    pattern._cardElement = event.currentTarget;
-                    await zoomToPattern(pattern);
+                card.title = 'Click to view in chart';
+                card.addEventListener('click', function() {
+                    zoomToPatternSimple(pattern, this);
                 });
             }
         });
@@ -580,56 +578,43 @@ function renderPatternCard(pattern, index, isCurrent) {
     `;
 }
 
-// Function to zoom chart to a specific pattern
-async function zoomToPattern(pattern) {
-    console.log('zoomToPattern called with:', pattern);
-
-    if (!pattern || !pattern.breakout_timestamp || !pattern.timeframe) {
-        console.error('Invalid pattern data:', pattern);
-        alert('Error: Pattern data is missing required fields');
+// Simpler function to zoom chart to a pattern
+function zoomToPatternSimple(pattern, cardElement) {
+    if (!pattern || !pattern.breakout_timestamp) {
+        console.error('Invalid pattern:', pattern);
         return;
     }
-
-    console.log('Current chart timeframe:', currentChartTimeframe);
-    console.log('Pattern timeframe:', pattern.timeframe);
-
-    // Check if we need to reload chart with different timeframe
-    if (currentChartTimeframe !== pattern.timeframe) {
-        console.log(`Switching chart from ${currentChartTimeframe} to ${pattern.timeframe}`);
-
-        // Update timeframe select
-        document.getElementById('timeframe-select').value = pattern.timeframe;
-
-        // Reload chart with pattern's timeframe
-        try {
-            await loadChart(pattern.timeframe);
-            console.log('Chart reloaded successfully');
-        } catch (error) {
-            console.error('Error reloading chart:', error);
-            alert('Error reloading chart: ' + error.message);
-            return;
-        }
-
-        // Wait for chart to render
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    if (!chart) {
-        console.error('Chart not initialized after reload');
-        alert('Error: Chart is not initialized');
-        return;
-    }
-
-    const breakoutTime = pattern.breakout_timestamp;
-    console.log('Breakout timestamp:', breakoutTime);
 
     // Scroll to chart
     document.getElementById('chart-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    // Zoom to pattern (show ±50 candles around breakout)
-    const timeScale = chart.timeScale();
+    // Check if we need to change timeframe
+    const currentTF = document.getElementById('timeframe-select').value;
+    if (currentTF !== pattern.timeframe) {
+        // Change timeframe selector
+        document.getElementById('timeframe-select').value = pattern.timeframe;
+        // Trigger loadAnalysis which will reload everything
+        loadAnalysis();
 
-    // Get candle duration based on pattern's timeframe
+        // Wait for chart to load, then zoom
+        setTimeout(() => {
+            doZoom(pattern, cardElement);
+        }, 2500);
+    } else {
+        // Same timeframe, zoom immediately
+        doZoom(pattern, cardElement);
+    }
+}
+
+function doZoom(pattern, cardElement) {
+    if (!chart) {
+        console.error('Chart not ready');
+        return;
+    }
+
+    const breakoutTime = pattern.breakout_timestamp;
+
+    // Calculate time window around breakout
     const timeframeToDuration = {
         '1h': 60 * 60,
         '4h': 4 * 60 * 60,
@@ -641,31 +626,24 @@ async function zoomToPattern(pattern) {
     const fromTime = breakoutTime - (50 * candleDuration);
     const toTime = breakoutTime + (20 * candleDuration);
 
-    console.log('Setting visible range:', { from: fromTime, to: toTime });
-
-    // Set visible time range
+    // Zoom chart
     try {
-        timeScale.setVisibleRange({
+        chart.timeScale().setVisibleRange({
             from: fromTime,
             to: toTime
         });
-        console.log('Chart zoomed successfully');
     } catch (error) {
-        console.error('Error setting visible range:', error);
+        console.error('Zoom error:', error);
     }
 
-    // Highlight the pattern card temporarily
-    const allPatterns = document.querySelectorAll('.pattern-detail');
-    allPatterns.forEach(p => p.style.backgroundColor = '');
-
-    // Highlight clicked pattern if available
-    if (pattern._cardElement) {
+    // Highlight card
+    if (cardElement) {
+        const allPatterns = document.querySelectorAll('.pattern-detail');
+        allPatterns.forEach(p => p.style.backgroundColor = '');
+        cardElement.style.backgroundColor = 'rgba(255, 165, 0, 0.15)';
         setTimeout(() => {
-            pattern._cardElement.style.backgroundColor = 'rgba(255, 165, 0, 0.1)';
-            setTimeout(() => {
-                pattern._cardElement.style.backgroundColor = '';
-            }, 2000);
-        }, 500);
+            cardElement.style.backgroundColor = '';
+        }, 3000);
     }
 }
 
