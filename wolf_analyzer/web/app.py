@@ -147,8 +147,8 @@ except Exception as e:
     pattern_recognition = None
 
 try:
-    foos_detector = FOOSPatternDetector(min_confidence=0.50)  # Lowered for testing
-    logger.info("✓ FOOS Pattern Detector initialized (50% confidence threshold)")
+    foos_detector = FOOSPatternDetector(min_confidence=0.50, relaxed_mode=True)  # Relaxed mode for testing
+    logger.info("✓ FOOS Pattern Detector initialized (50% confidence, RELAXED mode)")
 except Exception as e:
     log_error(e, "FOOSPatternDetector init")
     foos_detector = None

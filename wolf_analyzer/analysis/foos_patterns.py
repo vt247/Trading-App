@@ -5,11 +5,15 @@ Implements Cameron Fous' 4-pattern triangle breakout methodology
 
 import pandas as pd
 import numpy as np
+import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Dict
 from datetime import datetime
 
 from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,15 +63,20 @@ class FOOSPatternDetector:
     TODO: SURVIVAL, REVIVAL, GOLD patterns
     """
 
-    def __init__(self, min_confidence: float = 0.65):
+    def __init__(self, min_confidence: float = 0.65, relaxed_mode: bool = False):
         """
         Initialize FOOS pattern detector
 
         Args:
             min_confidence: Minimum confidence threshold (0.0-1.0)
+            relaxed_mode: If True, uses more lenient detection criteria for testing
         """
         self.min_confidence = min_confidence
+        self.relaxed_mode = relaxed_mode
         self.indicators = TechnicalIndicators()
+
+        if relaxed_mode:
+            logger.info("🔓 RELAXED MODE: Using lenient detection criteria for testing")
 
     def detect_patterns(self, df: pd.DataFrame, symbol: str) -> List[FOOSPattern]:
         """
@@ -83,10 +92,10 @@ class FOOSPatternDetector:
         patterns = []
 
         if len(df) < 100:
-            print(f"⚠️  {symbol}: Need at least 100 candles for pattern detection (got {len(df)})")
+            logger.warning(f"⚠️  {symbol}: Need at least 100 candles for pattern detection (got {len(df)})")
             return patterns
 
-        print(f"🔍 Scanning {symbol} for FOOS patterns ({len(df)} candles)...")
+        logger.info(f"🔍 Scanning {symbol} for FOOS patterns ({len(df)} candles)...")
 
         # Detect FORCE patterns
         force_patterns = self._detect_force(df)
@@ -99,9 +108,9 @@ class FOOSPatternDetector:
 
         # Show all patterns before filtering
         if force_patterns:
-            print(f"  Found {len(force_patterns)} FORCE candidate(s) before confidence filter")
+            logger.info(f"  Found {len(force_patterns)} FORCE candidate(s) before confidence filter")
             for p in force_patterns:
-                print(f"    - {p.pattern_type}: {p.confidence:.1%} confidence (threshold: {self.min_confidence:.1%})")
+                logger.info(f"    - {p.pattern_type}: {p.confidence:.1%} confidence (threshold: {self.min_confidence:.1%})")
 
         # Filter by confidence
         patterns = [p for p in patterns if p.confidence >= self.min_confidence]
@@ -110,9 +119,9 @@ class FOOSPatternDetector:
         patterns.sort(key=lambda x: x.confidence, reverse=True)
 
         if patterns:
-            print(f"✓ {symbol}: Detected {len(patterns)} high-confidence FOOS pattern(s)")
+            logger.info(f"✓ {symbol}: Detected {len(patterns)} high-confidence FOOS pattern(s)")
         else:
-            print(f"  {symbol}: No patterns above {self.min_confidence:.0%} confidence threshold")
+            logger.info(f"  {symbol}: No patterns above {self.min_confidence:.0%} confidence threshold")
 
         return patterns
 
@@ -139,11 +148,14 @@ class FOOSPatternDetector:
 
         # Need sufficient data
         if len(df) < 100:
-            print(f"      ⚠️  Insufficient data for FORCE detection: {len(df)} candles (need 100+)")
+            logger.warning(f"      ⚠️  Insufficient data for FORCE detection: {len(df)} candles (need 100+)")
             return patterns
 
-        print(f"      📊 FORCE detection starting with {len(df)} candles")
-        print(f"      📊 Scanning range: index 50 to {len(df) - 20} ({len(df) - 70} windows)")
+        logger.info(f"      📊 FORCE detection starting with {len(df)} candles")
+        logger.info(f"      📊 Scanning range: index 50 to {len(df) - 20} ({len(df) - 70} windows)")
+
+        if self.relaxed_mode:
+            logger.info(f"      🔓 RELAXED criteria: 1 neckline touch, 1.5:1 R:R, accepting bearish trends")
 
         # Calculate indicators
         ema_13 = self.indicators.calculate_ema_13(df)
@@ -174,10 +186,13 @@ class FOOSPatternDetector:
             lead_in = df.iloc[max(0, window_start - 20):window_start]
             lead_in_trend = self._classify_trend(lead_in)
 
-            # FORCE requires bullish or neutral lead-in
-            if lead_in_trend not in ['bullish', 'neutral']:
+            # FORCE requires bullish or neutral lead-in (relaxed: allow bearish)
+            if not self.relaxed_mode and lead_in_trend not in ['bullish', 'neutral']:
                 failed_lead_in += 1
                 continue
+            elif self.relaxed_mode and lead_in_trend == 'bearish':
+                # In relaxed mode, still count bearish but don't skip
+                pass
 
             # Step 2: Identify potential neckline (resistance)
             neckline_result = self._find_neckline(window)
@@ -187,8 +202,9 @@ class FOOSPatternDetector:
 
             neckline_price, neckline_touches, neckline_indices = neckline_result
 
-            # Need at least 2 touches to confirm neckline
-            if neckline_touches < 2:
+            # Need at least 2 touches to confirm neckline (relaxed: 1 touch OK)
+            min_touches = 1 if self.relaxed_mode else 2
+            if neckline_touches < min_touches:
                 failed_neckline += 1
                 continue
 
@@ -255,8 +271,9 @@ class FOOSPatternDetector:
             reward = target_2 - entry_high
             risk_reward = reward / risk if risk > 0 else 0
 
-            # Only consider if R:R >= 2:1
-            if risk_reward < 2.0:
+            # Only consider if R:R >= 2:1 (relaxed: 1.5:1)
+            min_risk_reward = 1.5 if self.relaxed_mode else 2.0
+            if risk_reward < min_risk_reward:
                 failed_risk_reward += 1
                 continue
 
@@ -300,28 +317,31 @@ class FOOSPatternDetector:
             i = breakout_idx + 10
 
         # Print debug summary - ALWAYS print this
-        print(f"      📊 FORCE scan summary:")
-        print(f"         Windows checked: {checked}")
-        print(f"         Patterns found: {len(patterns)}")
+        logger.info(f"      📊 FORCE scan summary:")
+        logger.info(f"         Windows checked: {checked}")
+        logger.info(f"         Patterns found: {len(patterns)}")
 
         if checked > 0:
             total_failed = failed_lead_in + failed_neckline + failed_trendline + failed_convergence + failed_breakout + failed_risk_reward
-            print(f"         Total failed: {total_failed}")
+            logger.info(f"         Total failed: {total_failed}")
+
+            min_rr = "1.5:1" if self.relaxed_mode else "2:1"
+            min_touches = "1+" if self.relaxed_mode else "2+"
 
             if failed_lead_in > 0:
-                print(f"         ↳ {failed_lead_in} ({failed_lead_in/checked*100:.1f}%) failed: bearish lead-in trend (need bullish/neutral)")
+                logger.info(f"         ↳ {failed_lead_in} ({failed_lead_in/checked*100:.1f}%) failed: bearish lead-in trend (need bullish/neutral)")
             if failed_neckline > 0:
-                print(f"         ↳ {failed_neckline} ({failed_neckline/checked*100:.1f}%) failed: no clear neckline resistance (need 2+ touches)")
+                logger.info(f"         ↳ {failed_neckline} ({failed_neckline/checked*100:.1f}%) failed: no clear neckline resistance (need {min_touches} touches)")
             if failed_trendline > 0:
-                print(f"         ↳ {failed_trendline} ({failed_trendline/checked*100:.1f}%) failed: no ascending support trendline")
+                logger.info(f"         ↳ {failed_trendline} ({failed_trendline/checked*100:.1f}%) failed: no ascending support trendline")
             if failed_convergence > 0:
-                print(f"         ↳ {failed_convergence} ({failed_convergence/checked*100:.1f}%) failed: triangle not converging")
+                logger.info(f"         ↳ {failed_convergence} ({failed_convergence/checked*100:.1f}%) failed: triangle not converging")
             if failed_breakout > 0:
-                print(f"         ↳ {failed_breakout} ({failed_breakout/checked*100:.1f}%) failed: no breakout above neckline")
+                logger.info(f"         ↳ {failed_breakout} ({failed_breakout/checked*100:.1f}%) failed: no breakout above neckline")
             if failed_risk_reward > 0:
-                print(f"         ↳ {failed_risk_reward} ({failed_risk_reward/checked*100:.1f}%) failed: risk/reward < 2:1")
+                logger.info(f"         ↳ {failed_risk_reward} ({failed_risk_reward/checked*100:.1f}%) failed: risk/reward < {min_rr}")
         else:
-            print(f"         ⚠️  No windows were checked!")
+            logger.warning(f"         ⚠️  No windows were checked!")
 
         return patterns
 
