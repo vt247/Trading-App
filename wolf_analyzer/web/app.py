@@ -389,24 +389,59 @@ def api_chart(symbol):
         )
 
         # Prepare horizontal lines for support/resistance
-        hlines = []
+        # mplfinance expects separate lists for y-values, colors, linestyles, linewidths
+        hline_values = []
+        hline_colors = []
+        hline_styles = []
+        hline_widths = []
+
+        # Support levels (green dashed)
         if len(support) > 0:
-            hlines.extend([{'y': float(s), 'color': '#26a69a', 'linestyle': '--', 'linewidths': 1} for s in support[:3]])
+            for s in support[:3]:
+                hline_values.append(float(s))
+                hline_colors.append('#26a69a')
+                hline_styles.append('--')
+                hline_widths.append(1)
+
+        # Resistance levels (red dashed)
         if len(resistance) > 0:
-            hlines.extend([{'y': float(r), 'color': '#ef5350', 'linestyle': '--', 'linewidths': 1} for r in resistance[:3]])
+            for r in resistance[:3]:
+                hline_values.append(float(r))
+                hline_colors.append('#ef5350')
+                hline_styles.append('--')
+                hline_widths.append(1)
 
         # Add pattern levels if available
         if patterns:
             pattern = patterns[0]  # Use first pattern
-            # Entry zone
+            # Entry zone (orange solid)
             if hasattr(pattern, 'entry_zone') and len(pattern.entry_zone) >= 2:
-                hlines.append({'y': float(pattern.entry_zone[0]), 'color': '#FFA726', 'linestyle': '-', 'linewidths': 2})
-            # Stop loss
+                hline_values.append(float(pattern.entry_zone[0]))
+                hline_colors.append('#FFA726')
+                hline_styles.append('-')
+                hline_widths.append(2)
+            # Stop loss (red solid)
             if hasattr(pattern, 'stop_loss'):
-                hlines.append({'y': float(pattern.stop_loss), 'color': '#EF5350', 'linestyle': '-', 'linewidths': 2})
-            # Targets
+                hline_values.append(float(pattern.stop_loss))
+                hline_colors.append('#EF5350')
+                hline_styles.append('-')
+                hline_widths.append(2)
+            # Target (green solid)
             if hasattr(pattern, 'targets') and len(pattern.targets) > 0:
-                hlines.append({'y': float(pattern.targets[0]), 'color': '#66BB6A', 'linestyle': '-', 'linewidths': 2})
+                hline_values.append(float(pattern.targets[0]))
+                hline_colors.append('#66BB6A')
+                hline_styles.append('-')
+                hline_widths.append(2)
+
+        # Create hlines dict in the format mplfinance expects
+        hlines_dict = None
+        if hline_values:
+            hlines_dict = dict(
+                hlines=hline_values,
+                colors=hline_colors,
+                linestyles=hline_styles,
+                linewidths=hline_widths
+            )
 
         # Create chart
         fig, axes = mpf.plot(
@@ -416,7 +451,7 @@ def api_chart(symbol):
             title=f'{symbol} - {timeframe.upper()}',
             ylabel='Price (USDT)',
             volume=True,
-            hlines=dict(hlines=hlines) if hlines else None,
+            hlines=hlines_dict,
             returnfig=True,
             figsize=(12, 6),
             tight_layout=True
