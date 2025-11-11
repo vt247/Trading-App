@@ -258,6 +258,9 @@ class FOOSPatternDetector:
             entry_low = neckline_price * 0.998  # Just below neckline
             entry_high = neckline_price * 1.002  # Just above neckline
 
+            # Get consolidation lows for triangle height calculation
+            consolidation_lows = window['low']
+
             # Stop loss: 2% below neckline (more reasonable than consolidation low)
             # Using neckline as stop makes sense: if price breaks back below the
             # resistance it just broke through, the pattern has failed
