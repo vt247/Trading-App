@@ -110,8 +110,8 @@ async function loadAnalysis() {
         // Display indicators (pass both FOOS and traditional)
         displayIndicators(data.foos_indicators, data.traditional_indicators || data.indicators);
 
-        // Display patterns
-        displayPatterns(data.patterns);
+        // Display patterns (current and historical separately)
+        displayPatterns(data.current_patterns, data.historical_patterns);
 
         // Load chart
         loadChart(timeframe);
@@ -414,10 +414,13 @@ function displayIndicators(foosIndicators, traditionalIndicators) {
     container.innerHTML = html;
 }
 
-function displayPatterns(patterns) {
+function displayPatterns(currentPatterns, historicalPatterns) {
     const container = document.getElementById('patterns-container');
 
-    if (!patterns || patterns.length === 0) {
+    const hasCurrentPatterns = currentPatterns && currentPatterns.length > 0;
+    const hasHistoricalPatterns = historicalPatterns && historicalPatterns.length > 0;
+
+    if (!hasCurrentPatterns && !hasHistoricalPatterns) {
         container.innerHTML = `
             <div class="text-center">
                 <p style="color: var(--text-muted); padding: 2rem;">
@@ -432,80 +435,176 @@ function displayPatterns(patterns) {
 
     let html = '';
 
-    patterns.forEach((pattern, index) => {
-        // FOOS patterns are always bullish (FORCE, SURVIVAL, REVIVAL, GOLD)
-        const badgeClass = 'bullish';
-
-        // Get pattern emoji
-        let patternEmoji = '🎯';
-        if (pattern.pattern_type === 'FORCE') patternEmoji = '⚡';
-        else if (pattern.pattern_type === 'SURVIVAL') patternEmoji = '💪';
-        else if (pattern.pattern_type === 'REVIVAL') patternEmoji = '🔄';
-        else if (pattern.pattern_type === 'GOLD') patternEmoji = '🏆';
-
+    // CURRENT PATTERNS (if any)
+    if (hasCurrentPatterns) {
         html += `
-            <div class="pattern-detail">
-                <div class="pattern-header">
-                    <h3 class="card-title">${patternEmoji} ${pattern.pattern_type} Pattern</h3>
-                    <span class="confidence-badge">${(pattern.confidence * 100).toFixed(0)}% Confidence</span>
-                </div>
-
-                <p class="card-subtitle">${pattern.description}</p>
-
-                <div class="pattern-levels">
-                    <div class="level-item">
-                        <div class="level-label">📍 Entry Zone</div>
-                        <div class="level-value">${formatCurrency(pattern.entry_low)}</div>
-                        <div class="level-value">${formatCurrency(pattern.entry_high)}</div>
-                    </div>
-
-                    <div class="level-item">
-                        <div class="level-label">🛑 Stop Loss</div>
-                        <div class="level-value">${formatCurrency(pattern.stop_loss)}</div>
-                    </div>
-
-                    <div class="level-item">
-                        <div class="level-label">🎯 Target 1</div>
-                        <div class="level-value">${formatCurrency(pattern.target_1)}</div>
-                    </div>
-
-                    <div class="level-item">
-                        <div class="level-label">🎯 Target 2</div>
-                        <div class="level-value">${formatCurrency(pattern.target_2)}</div>
-                    </div>
-
-                    <div class="level-item">
-                        <div class="level-label">🎯 Target 3</div>
-                        <div class="level-value">${formatCurrency(pattern.target_3)}</div>
-                    </div>
-
-                    <div class="level-item">
-                        <div class="level-label">📊 R:R Ratio</div>
-                        <div class="level-value">${pattern.risk_reward.toFixed(2)}:1</div>
-                    </div>
-                </div>
-
-                <div class="mt-2">
-                    <span class="pattern-badge ${badgeClass}">
-                        ${pattern.volume_spike_confirmed ? '✓' : '✗'} Volume Spike
-                    </span>
-                    <span class="pattern-badge ${badgeClass}">
-                        📈 ${pattern.lead_in_trend.toUpperCase()} Lead-in
-                    </span>
-                    <span class="pattern-badge ${badgeClass}">
-                        ⏱️ ${pattern.consolidation_days} candles
-                    </span>
-                    <span class="pattern-badge ${badgeClass}">
-                        ${pattern.ema_13_position === 'above' ? '🟡✓' : '🟡✗'} 13 EMA
-                    </span>
-                </div>
-
-                ${pattern.notes ? `<p class="mt-2" style="color: var(--text-muted); font-size: 0.9rem;">💡 ${pattern.notes}</p>` : ''}
+            <div style="margin-bottom: 2rem;">
+                <h3 style="color: var(--primary); margin-bottom: 1rem; font-size: 1.2rem;">
+                    ⚡ Current Pattern ${currentPatterns.length > 1 ? `(${currentPatterns.length})` : ''}
+                </h3>
+                <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Active pattern in the last 20 candles - potentially forming or recently broken out
+                </p>
             </div>
         `;
-    });
+
+        currentPatterns.forEach((pattern, index) => {
+            html += renderPatternCard(pattern, index, true);
+        });
+    }
+
+    // HISTORICAL PATTERNS (if any)
+    if (hasHistoricalPatterns) {
+        html += `
+            <div style="margin-top: 3rem; margin-bottom: 2rem;">
+                <h3 style="color: var(--text-muted); margin-bottom: 1rem; font-size: 1.2rem;">
+                    📚 Historical Patterns (${historicalPatterns.length})
+                </h3>
+                <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Click on a pattern to view it in the chart
+                </p>
+            </div>
+        `;
+
+        historicalPatterns.forEach((pattern, index) => {
+            html += renderPatternCard(pattern, index, false);
+        });
+    }
 
     container.innerHTML = html;
+
+    // Add click handlers for historical patterns to zoom chart
+    if (hasHistoricalPatterns) {
+        historicalPatterns.forEach((pattern, index) => {
+            const card = document.getElementById(`pattern-historical-${index}`);
+            if (card) {
+                card.style.cursor = 'pointer';
+                card.addEventListener('click', () => zoomToPattern(pattern));
+            }
+        });
+    }
+}
+
+function renderPatternCard(pattern, index, isCurrent) {
+    const patternId = isCurrent ? `pattern-current-${index}` : `pattern-historical-${index}`;
+
+    // FOOS patterns are always bullish (FORCE, SURVIVAL, REVIVAL, GOLD)
+    const badgeClass = 'bullish';
+
+    // Get pattern emoji
+    let patternEmoji = '🎯';
+    if (pattern.pattern_type === 'FORCE') patternEmoji = '⚡';
+    else if (pattern.pattern_type === 'SURVIVAL') patternEmoji = '💪';
+    else if (pattern.pattern_type === 'REVIVAL') patternEmoji = '🔄';
+    else if (pattern.pattern_type === 'GOLD') patternEmoji = '🏆';
+
+    // Date formatting
+    const detectedDate = new Date(pattern.detected_at).toLocaleDateString();
+
+    return `
+        <div class="pattern-detail" id="${patternId}" ${!isCurrent ? 'style="transition: all 0.2s; border: 2px solid transparent;" onmouseover="this.style.borderColor=\'var(--primary)\'" onmouseout="this.style.borderColor=\'transparent\'"' : ''}>
+            <div class="pattern-header">
+                <h3 class="card-title">${patternEmoji} ${pattern.pattern_type} Pattern ${!isCurrent ? `<span style="font-size: 0.8rem; color: var(--text-muted);">(${detectedDate})</span>` : ''}</h3>
+                <span class="confidence-badge">${(pattern.confidence * 100).toFixed(0)}% Confidence</span>
+            </div>
+
+            <p class="card-subtitle">${pattern.description}</p>
+
+            <div class="pattern-levels">
+                <div class="level-item">
+                    <div class="level-label">📍 Entry Zone</div>
+                    <div class="level-value">${formatCurrency(pattern.entry_low)}</div>
+                    <div class="level-value">${formatCurrency(pattern.entry_high)}</div>
+                </div>
+
+                <div class="level-item">
+                    <div class="level-label">🛑 Stop Loss</div>
+                    <div class="level-value">${formatCurrency(pattern.stop_loss)}</div>
+                </div>
+
+                <div class="level-item">
+                    <div class="level-label">🎯 Target 1</div>
+                    <div class="level-value">${formatCurrency(pattern.target_1)}</div>
+                </div>
+
+                <div class="level-item">
+                    <div class="level-label">🎯 Target 2</div>
+                    <div class="level-value">${formatCurrency(pattern.target_2)}</div>
+                </div>
+
+                <div class="level-item">
+                    <div class="level-label">🎯 Target 3</div>
+                    <div class="level-value">${formatCurrency(pattern.target_3)}</div>
+                </div>
+
+                <div class="level-item">
+                    <div class="level-label">📊 R:R Ratio</div>
+                    <div class="level-value">${pattern.risk_reward.toFixed(2)}:1</div>
+                </div>
+            </div>
+
+            <div class="mt-2">
+                <span class="pattern-badge ${badgeClass}">
+                    ${pattern.volume_spike_confirmed ? '✓' : '✗'} Volume Spike
+                </span>
+                <span class="pattern-badge ${badgeClass}">
+                    📈 ${pattern.lead_in_trend.toUpperCase()} Lead-in
+                </span>
+                <span class="pattern-badge ${badgeClass}">
+                    ⏱️ ${pattern.consolidation_days} candles
+                </span>
+                <span class="pattern-badge ${badgeClass}">
+                    ${pattern.ema_13_position === 'above' ? '🟡✓' : '🟡✗'} 13 EMA
+                </span>
+            </div>
+
+            ${pattern.notes ? `<p class="mt-2" style="color: var(--text-muted); font-size: 0.9rem;">💡 ${pattern.notes}</p>` : ''}
+
+            ${!isCurrent ? '<p style="margin-top: 1rem; text-align: center; color: var(--primary); font-size: 0.85rem;">👆 Click to view in chart</p>' : ''}
+        </div>
+    `;
+}
+
+// Function to zoom chart to a specific pattern
+function zoomToPattern(pattern) {
+    if (!chart) {
+        console.error('Chart not initialized');
+        return;
+    }
+
+    const breakoutTime = pattern.breakout_timestamp;
+
+    // Scroll to chart
+    document.getElementById('chart-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Zoom to pattern (show ±50 candles around breakout)
+    const timeScale = chart.timeScale();
+
+    // Calculate time window (assuming 4h candles = 14400 seconds)
+    const candleDuration = 4 * 60 * 60; // 4 hours in seconds
+    const fromTime = breakoutTime - (50 * candleDuration);
+    const toTime = breakoutTime + (20 * candleDuration);
+
+    // Set visible time range
+    timeScale.setVisibleRange({
+        from: fromTime,
+        to: toTime
+    });
+
+    // Highlight the pattern card temporarily
+    const allPatterns = document.querySelectorAll('.pattern-detail');
+    allPatterns.forEach(p => p.style.backgroundColor = '');
+
+    // Find and highlight clicked pattern
+    setTimeout(() => {
+        const clickedPattern = event.target.closest('.pattern-detail');
+        if (clickedPattern) {
+            clickedPattern.style.backgroundColor = 'rgba(255, 165, 0, 0.1)';
+            setTimeout(() => {
+                clickedPattern.style.backgroundColor = '';
+            }, 2000);
+        }
+    }, 500);
 }
 
 function getTrendEmoji(trend) {

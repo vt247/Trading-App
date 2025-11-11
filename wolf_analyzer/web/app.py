@@ -380,12 +380,16 @@ def api_analyze(symbol):
         # FOOS Pattern Detection
         foos_patterns = foos_detector.detect_patterns(df, symbol)
 
-        patterns_data = []
+        # Categorize patterns: current (last 20 candles) vs historical
+        current_patterns = []
+        historical_patterns = []
+
         for pattern in foos_patterns:
-            patterns_data.append({
+            pattern_data = {
                 'pattern_type': str(pattern.pattern_type),
                 'confidence': safe_float(pattern.confidence),
                 'detected_at': pattern.detected_at.isoformat(),
+                'breakout_timestamp': int(pattern.detected_at.timestamp()),  # For chart zooming
                 'phase_1_start': int(pattern.phase_1_start),
                 'phase_2_start': int(pattern.phase_2_start),
                 'phase_3_breakout': int(pattern.phase_3_breakout),
@@ -413,7 +417,13 @@ def api_analyze(symbol):
                 },
                 'description': str(pattern.description),
                 'notes': str(pattern.notes)
-            })
+            }
+
+            # Current pattern if breakout happened in last 20 candles
+            if pattern.phase_3_breakout >= len(df) - 20:
+                current_patterns.append(pattern_data)
+            else:
+                historical_patterns.append(pattern_data)
 
         return jsonify({
             'success': True,
@@ -434,7 +444,9 @@ def api_analyze(symbol):
                 'macd_signal': safe_float(signal_line.iloc[-1]) if not signal_line.empty else None,
                 'macd_histogram': safe_float(histogram.iloc[-1]) if not histogram.empty else None
             },
-            'patterns': patterns_data,
+            'current_patterns': current_patterns,
+            'historical_patterns': historical_patterns,
+            'patterns': current_patterns + historical_patterns,  # Keep for compatibility
             'timestamp': datetime.now().isoformat()
         })
 
