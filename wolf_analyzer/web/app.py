@@ -397,16 +397,16 @@ def api_chart(symbol):
 
         # Support levels (green dashed)
         if len(support) > 0:
-            for s in support[:3]:
-                hline_values.append(float(s))
+            for sup_level in support[:3]:
+                hline_values.append(float(sup_level))
                 hline_colors.append('#26a69a')
                 hline_styles.append('--')
                 hline_widths.append(1)
 
         # Resistance levels (red dashed)
         if len(resistance) > 0:
-            for r in resistance[:3]:
-                hline_values.append(float(r))
+            for res_level in resistance[:3]:
+                hline_values.append(float(res_level))
                 hline_colors.append('#ef5350')
                 hline_styles.append('--')
                 hline_widths.append(1)
