@@ -78,6 +78,7 @@
 <script>
 const symbol = "{{ symbol }}";
 let chart = null;  // Global chart instance
+let currentChartTimeframe = null;  // Track current chart timeframe
 let candlestickSeries = null;
 let ema13Series = null;
 let ma50Series = null;
@@ -136,6 +137,9 @@ async function loadChart(timeframe) {
             showError('chart-container', data.error);
             return;
         }
+
+        // Update current timeframe
+        currentChartTimeframe = timeframe;
 
         // Clear container and create chart
         const container = document.getElementById('chart-container');
@@ -481,7 +485,11 @@ function displayPatterns(currentPatterns, historicalPatterns) {
             const card = document.getElementById(`pattern-historical-${index}`);
             if (card) {
                 card.style.cursor = 'pointer';
-                card.addEventListener('click', () => zoomToPattern(pattern));
+                card.addEventListener('click', (event) => {
+                    // Store pattern ID for highlighting
+                    pattern._cardElement = event.currentTarget;
+                    zoomToPattern(pattern);
+                });
             }
         });
     }
@@ -572,7 +580,26 @@ function renderPatternCard(pattern, index, isCurrent) {
 }
 
 // Function to zoom chart to a specific pattern
-function zoomToPattern(pattern) {
+async function zoomToPattern(pattern) {
+    if (!pattern || !pattern.breakout_timestamp || !pattern.timeframe) {
+        console.error('Invalid pattern data:', pattern);
+        return;
+    }
+
+    // Check if we need to reload chart with different timeframe
+    if (currentChartTimeframe !== pattern.timeframe) {
+        console.log(`Switching chart from ${currentChartTimeframe} to ${pattern.timeframe}`);
+
+        // Update timeframe select
+        document.getElementById('timeframe-select').value = pattern.timeframe;
+
+        // Reload chart with pattern's timeframe
+        await loadChart(pattern.timeframe);
+
+        // Wait for chart to render
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
     if (!chart) {
         console.error('Chart not initialized');
         return;
@@ -608,16 +635,15 @@ function zoomToPattern(pattern) {
     const allPatterns = document.querySelectorAll('.pattern-detail');
     allPatterns.forEach(p => p.style.backgroundColor = '');
 
-    // Find and highlight clicked pattern
-    setTimeout(() => {
-        const clickedPattern = event.target.closest('.pattern-detail');
-        if (clickedPattern) {
-            clickedPattern.style.backgroundColor = 'rgba(255, 165, 0, 0.1)';
+    // Highlight clicked pattern if available
+    if (pattern._cardElement) {
+        setTimeout(() => {
+            pattern._cardElement.style.backgroundColor = 'rgba(255, 165, 0, 0.1)';
             setTimeout(() => {
-                clickedPattern.style.backgroundColor = '';
+                pattern._cardElement.style.backgroundColor = '';
             }, 2000);
-        }
-    }, 500);
+        }, 500);
+    }
 }
 
 function getTrendEmoji(trend) {
