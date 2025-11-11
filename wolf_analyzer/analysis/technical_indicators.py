@@ -1,15 +1,134 @@
 """
 Technical Indicators Calculator
-Calculates various technical indicators for market analysis
+Calculates FOOS-method indicators and traditional technical indicators
 """
 
 import pandas as pd
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 
 
 class TechnicalIndicators:
     """Calculate technical indicators for OHLCV data"""
+
+    # ==========================================
+    # FOOS METHOD INDICATORS
+    # ==========================================
+
+    @staticmethod
+    def calculate_ema_13(df: pd.DataFrame) -> pd.Series:
+        """
+        Calculate 13-period Exponential Moving Average (YELLOW line in FOOS)
+
+        Primary trend indicator:
+        - Price above 13 EMA = bullish trend
+        - Price below 13 EMA = bearish trend
+        - First retest after breakout = strongest entry
+        - Breakdown below = trend reversal warning
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            Series with 13 EMA values
+        """
+        return df['close'].ewm(span=13, adjust=False).mean()
+
+    @staticmethod
+    def calculate_ma_50(df: pd.DataFrame) -> pd.Series:
+        """
+        Calculate 50-period Simple Moving Average (PINK line in FOOS)
+
+        Medium-term trend indicator:
+        - Breakdown below 50 MA = major warning signal
+        - In crypto: can signal 70-90% drop incoming
+        - Acts as support in strong uptrends
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            Series with 50 MA values
+        """
+        return df['close'].rolling(window=50).mean()
+
+    @staticmethod
+    def calculate_ma_200(df: pd.DataFrame) -> pd.Series:
+        """
+        Calculate 200-period Simple Moving Average (BLUE line in FOOS)
+
+        Long-term trend indicator:
+        - Price above 200 MA = bull market
+        - Price below 200 MA = bear market
+        - Acts as major support/resistance
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            Series with 200 MA values
+        """
+        return df['close'].rolling(window=200).mean()
+
+    @staticmethod
+    def calculate_foos_indicators(df: pd.DataFrame) -> Dict[str, pd.Series]:
+        """
+        Calculate all FOOS indicators at once
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            Dictionary with all FOOS indicators
+        """
+        return {
+            'ema_13': TechnicalIndicators.calculate_ema_13(df),
+            'ma_50': TechnicalIndicators.calculate_ma_50(df),
+            'ma_200': TechnicalIndicators.calculate_ma_200(df),
+            'vwap': TechnicalIndicators.calculate_vwap(df)
+        }
+
+    @staticmethod
+    def get_price_position(df: pd.DataFrame) -> Dict[str, str]:
+        """
+        Get current price position relative to FOOS indicators
+
+        Returns:
+            Dictionary describing price position
+        """
+        current_price = df['close'].iloc[-1]
+        ema_13 = TechnicalIndicators.calculate_ema_13(df).iloc[-1]
+        ma_50 = TechnicalIndicators.calculate_ma_50(df).iloc[-1]
+        ma_200 = TechnicalIndicators.calculate_ma_200(df).iloc[-1]
+
+        return {
+            'ema_13': 'above' if current_price > ema_13 else 'below',
+            'ma_50': 'above' if current_price > ma_50 else 'below',
+            'ma_200': 'above' if current_price > ma_200 else 'below',
+            'trend': TechnicalIndicators._determine_trend(current_price, ema_13, ma_50, ma_200)
+        }
+
+    @staticmethod
+    def _determine_trend(price: float, ema_13: float, ma_50: float, ma_200: float) -> str:
+        """Determine overall trend based on indicator positions"""
+        if price > ema_13 > ma_50 > ma_200:
+            return 'strong_bull'
+        elif price > ema_13 > ma_50:
+            return 'bull'
+        elif price > ema_13:
+            return 'weak_bull'
+        elif price < ema_13 < ma_50 < ma_200:
+            return 'strong_bear'
+        elif price < ema_13 < ma_50:
+            return 'bear'
+        elif price < ema_13:
+            return 'weak_bear'
+        else:
+            return 'neutral'
+
+    # ==========================================
+    # TRADITIONAL INDICATORS (keeping existing)
+    # ==========================================
 
     @staticmethod
     def calculate_support_resistance(

@@ -1,0 +1,464 @@
+"""
+FOOS Pattern Recognition System
+Implements Cameron Fous' 4-pattern triangle breakout methodology
+"""
+
+import pandas as pd
+import numpy as np
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Dict
+from datetime import datetime
+
+from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
+
+
+@dataclass
+class FOOSPattern:
+    """FOOS Pattern detection result"""
+    pattern_type: str  # FORCE, SURVIVAL, REVIVAL, GOLD
+    confidence: float  # 0.0 - 1.0
+    detected_at: datetime
+
+    # Phase timestamps (indices in dataframe)
+    phase_1_start: int
+    phase_2_start: int
+    phase_3_breakout: int
+
+    # Key price levels
+    neckline_price: float
+    neckline_touches: int
+    trendline_slope: float
+    entry_low: float
+    entry_high: float
+    stop_loss: float
+    target_1: float
+    target_2: float
+    target_3: float
+    risk_reward: float
+
+    # Pattern characteristics
+    lead_in_trend: str  # 'bullish', 'neutral', 'bearish'
+    consolidation_days: int
+    volume_spike_confirmed: bool
+    ema_13_position: str  # 'above', 'below'
+
+    # Trendline points for drawing
+    neckline_start_idx: int
+    neckline_end_idx: int
+    trendline_start_idx: int
+    trendline_end_idx: int
+
+    description: str
+    notes: str
+
+
+class FOOSPatternDetector:
+    """
+    Detects FOOS patterns in historical price data
+    Currently implements: FORCE pattern
+    TODO: SURVIVAL, REVIVAL, GOLD patterns
+    """
+
+    def __init__(self, min_confidence: float = 0.65):
+        """
+        Initialize FOOS pattern detector
+
+        Args:
+            min_confidence: Minimum confidence threshold (0.0-1.0)
+        """
+        self.min_confidence = min_confidence
+        self.indicators = TechnicalIndicators()
+
+    def detect_patterns(self, df: pd.DataFrame, symbol: str) -> List[FOOSPattern]:
+        """
+        Detect all FOOS patterns in the dataset
+
+        Args:
+            df: DataFrame with OHLCV data (needs at least 100 candles)
+            symbol: Trading pair symbol
+
+        Returns:
+            List of detected patterns sorted by confidence
+        """
+        patterns = []
+
+        if len(df) < 100:
+            print(f"⚠️  Need at least 100 candles for pattern detection (got {len(df)})")
+            return patterns
+
+        # Detect FORCE patterns
+        force_patterns = self._detect_force(df)
+        patterns.extend(force_patterns)
+
+        # TODO: Add other pattern types
+        # patterns.extend(self._detect_survival(df))
+        # patterns.extend(self._detect_revival(df))
+        # patterns.extend(self._detect_gold(df))
+
+        # Filter by confidence
+        patterns = [p for p in patterns if p.confidence >= self.min_confidence]
+
+        # Sort by confidence (highest first)
+        patterns.sort(key=lambda x: x.confidence, reverse=True)
+
+        if patterns:
+            print(f"✓ Detected {len(patterns)} FOOS pattern(s) for {symbol}")
+        else:
+            print(f"  No FOOS patterns detected for {symbol}")
+
+        return patterns
+
+    def _detect_force(self, df: pd.DataFrame) -> List[FOOSPattern]:
+        """
+        Detect FORCE pattern (most reliable)
+
+        FORCE Pattern Characteristics:
+        - Lead-in: Bullish or Neutral trend
+        - Phase 1: Price + Volume increase (initial bullish move)
+        - Phase 2: Consolidation forming triangle
+          - Neckline: Flat resistance (2+ touches)
+          - Trendline: Rising support (2+ higher lows)
+          - Volume: Decreasing during consolidation
+        - Phase 3: Breakout above neckline with volume spike
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            List of detected FORCE patterns
+        """
+        patterns = []
+
+        # Need sufficient data
+        if len(df) < 100:
+            return patterns
+
+        # Calculate indicators
+        ema_13 = self.indicators.calculate_ema_13(df)
+
+        # Scan through data looking for potential patterns
+        # Start from index 50 to have enough history for lead-in trend
+        # End 20 candles before current to see if breakout confirmed
+        for i in range(50, len(df) - 20):
+            # Look at a window of 30-50 candles for consolidation
+            window_start = i
+            window_end = min(i + 50, len(df) - 10)
+            window = df.iloc[window_start:window_end]
+
+            if len(window) < 30:
+                continue
+
+            # Step 1: Check lead-in trend (20 candles before consolidation)
+            lead_in = df.iloc[max(0, window_start - 20):window_start]
+            lead_in_trend = self._classify_trend(lead_in)
+
+            # FORCE requires bullish or neutral lead-in
+            if lead_in_trend not in ['bullish', 'neutral']:
+                continue
+
+            # Step 2: Identify potential neckline (resistance)
+            neckline_result = self._find_neckline(window)
+            if not neckline_result:
+                continue
+
+            neckline_price, neckline_touches, neckline_indices = neckline_result
+
+            # Need at least 2 touches to confirm neckline
+            if neckline_touches < 2:
+                continue
+
+            # Step 3: Identify ascending trendline (support)
+            trendline_result = self._find_ascending_trendline(window)
+            if not trendline_result:
+                continue
+
+            trendline_slope, trendline_indices = trendline_result
+
+            # Slope must be positive (ascending)
+            if trendline_slope <= 0:
+                continue
+
+            # Step 4: Check for triangle convergence
+            # Lines should be getting closer (consolidation narrowing)
+            if not self._check_triangle_convergence(window, neckline_price, trendline_indices):
+                continue
+
+            # Step 5: Check volume pattern (decreasing during consolidation)
+            volume_decreasing = self._is_volume_decreasing(window)
+
+            # Step 6: Look for breakout after consolidation
+            breakout_result = self._find_breakout(
+                df, window_end, neckline_price, volume_decreasing
+            )
+
+            if not breakout_result:
+                continue
+
+            breakout_idx, breakout_confirmed, volume_spike = breakout_result
+
+            # Calculate confidence score
+            confidence = self._calculate_force_confidence(
+                neckline_touches=neckline_touches,
+                trendline_slope=trendline_slope,
+                volume_decreasing=volume_decreasing,
+                volume_spike=volume_spike,
+                lead_in_trend=lead_in_trend,
+                consolidation_length=len(window)
+            )
+
+            # Calculate entry/exit levels
+            current_price = df.iloc[breakout_idx]['close']
+            entry_low = neckline_price * 0.998  # Just below neckline
+            entry_high = neckline_price * 1.002  # Just above neckline
+
+            # Stop loss: Below lowest low in consolidation
+            consolidation_lows = window['low']
+            stop_loss = consolidation_lows.min() * 0.995
+
+            # Targets based on triangle height
+            triangle_height = neckline_price - consolidation_lows.min()
+            target_1 = neckline_price + (triangle_height * 0.5)
+            target_2 = neckline_price + (triangle_height * 1.0)
+            target_3 = neckline_price + (triangle_height * 1.5)
+
+            # Risk:Reward calculation
+            risk = entry_high - stop_loss
+            reward = target_2 - entry_high
+            risk_reward = reward / risk if risk > 0 else 0
+
+            # Only consider if R:R >= 2:1
+            if risk_reward < 2.0:
+                continue
+
+            # Check EMA 13 position
+            ema_13_val = ema_13.iloc[breakout_idx]
+            ema_13_position = 'above' if current_price > ema_13_val else 'below'
+
+            # Create pattern object
+            pattern = FOOSPattern(
+                pattern_type='FORCE',
+                confidence=confidence,
+                detected_at=df.index[breakout_idx],
+                phase_1_start=window_start - 10,  # Approximate start of initial move
+                phase_2_start=window_start,
+                phase_3_breakout=breakout_idx,
+                neckline_price=neckline_price,
+                neckline_touches=neckline_touches,
+                trendline_slope=trendline_slope,
+                entry_low=entry_low,
+                entry_high=entry_high,
+                stop_loss=stop_loss,
+                target_1=target_1,
+                target_2=target_2,
+                target_3=target_3,
+                risk_reward=risk_reward,
+                lead_in_trend=lead_in_trend,
+                consolidation_days=len(window),
+                volume_spike_confirmed=volume_spike,
+                ema_13_position=ema_13_position,
+                neckline_start_idx=window_start + neckline_indices[0],
+                neckline_end_idx=window_start + neckline_indices[-1],
+                trendline_start_idx=window_start + trendline_indices[0],
+                trendline_end_idx=window_start + trendline_indices[-1],
+                description=f"FORCE pattern: {lead_in_trend.title()} lead-in → Triangle consolidation → Breakout",
+                notes=f"Neckline: ${neckline_price:.2f}, R:R {risk_reward:.2f}:1"
+            )
+
+            patterns.append(pattern)
+
+            # Skip ahead to avoid overlapping patterns
+            i = breakout_idx + 10
+
+        return patterns
+
+    def _classify_trend(self, df: pd.DataFrame) -> str:
+        """
+        Classify trend as bullish, neutral, or bearish
+
+        Args:
+            df: DataFrame with OHLCV data
+
+        Returns:
+            'bullish', 'neutral', or 'bearish'
+        """
+        if len(df) < 5:
+            return 'neutral'
+
+        # Calculate price slope
+        prices = df['close'].values
+        x = np.arange(len(prices))
+        slope = np.polyfit(x, prices, 1)[0]
+
+        # Normalize slope by average price
+        avg_price = prices.mean()
+        norm_slope = slope / avg_price
+
+        # Classify
+        if norm_slope > 0.001:  # More than 0.1% per candle
+            return 'bullish'
+        elif norm_slope < -0.001:
+            return 'bearish'
+        else:
+            return 'neutral'
+
+    def _find_neckline(self, df: pd.DataFrame) -> Optional[Tuple[float, int, List[int]]]:
+        """
+        Find horizontal neckline (resistance) in consolidation
+
+        Returns:
+            (neckline_price, touch_count, touch_indices) or None
+        """
+        highs = df['high'].values
+
+        # Find the highest point in the range
+        max_high = highs.max()
+
+        # Count touches within 0.5% of max_high
+        threshold = max_high * 0.005
+        touches = []
+
+        for i, high in enumerate(highs):
+            if abs(high - max_high) <= threshold:
+                touches.append(i)
+
+        if len(touches) >= 2:
+            return (max_high, len(touches), touches)
+
+        return None
+
+    def _find_ascending_trendline(self, df: pd.DataFrame) -> Optional[Tuple[float, List[int]]]:
+        """
+        Find ascending trendline (rising support) in consolidation
+
+        Returns:
+            (slope, low_indices) or None
+        """
+        lows = df['low'].values
+
+        # Find local lows (points where price touched support)
+        local_lows = []
+        for i in range(1, len(lows) - 1):
+            if lows[i] <= lows[i-1] and lows[i] <= lows[i+1]:
+                local_lows.append(i)
+
+        if len(local_lows) < 2:
+            return None
+
+        # Calculate slope through local lows
+        x = np.array(local_lows)
+        y = lows[local_lows]
+
+        if len(x) < 2:
+            return None
+
+        slope = np.polyfit(x, y, 1)[0]
+
+        return (slope, local_lows)
+
+    def _check_triangle_convergence(
+        self,
+        df: pd.DataFrame,
+        neckline: float,
+        trendline_indices: List[int]
+    ) -> bool:
+        """Check if triangle is converging (getting narrower)"""
+        if len(trendline_indices) < 2:
+            return False
+
+        lows = df['low'].values
+
+        # Distance from trendline to neckline should decrease
+        start_distance = neckline - lows[trendline_indices[0]]
+        end_distance = neckline - lows[trendline_indices[-1]]
+
+        # End distance should be smaller (converging)
+        return end_distance < start_distance * 0.8
+
+    def _is_volume_decreasing(self, df: pd.DataFrame) -> bool:
+        """Check if volume is decreasing during consolidation"""
+        if len(df) < 10:
+            return False
+
+        first_half_vol = df['volume'].iloc[:len(df)//2].mean()
+        second_half_vol = df['volume'].iloc[len(df)//2:].mean()
+
+        return second_half_vol < first_half_vol * 0.9
+
+    def _find_breakout(
+        self,
+        df: pd.DataFrame,
+        consolidation_end: int,
+        neckline: float,
+        volume_was_decreasing: bool
+    ) -> Optional[Tuple[int, bool, bool]]:
+        """
+        Look for breakout after consolidation ends
+
+        Returns:
+            (breakout_index, confirmed, volume_spike) or None
+        """
+        # Look at next 20 candles for breakout
+        search_end = min(consolidation_end + 20, len(df))
+
+        for i in range(consolidation_end, search_end):
+            candle = df.iloc[i]
+
+            # Check if price broke above neckline
+            if candle['close'] > neckline * 1.002:  # 0.2% above neckline
+                # Check for volume spike
+                avg_volume = df['volume'].iloc[max(0, i-20):i].mean()
+                current_volume = candle['volume']
+                volume_spike = current_volume > avg_volume * 1.3
+
+                # Breakout confirmed if:
+                # 1. Close above neckline
+                # 2. (Ideally) volume spike present
+                confirmed = volume_spike or (not volume_was_decreasing)
+
+                return (i, confirmed, volume_spike)
+
+        return None
+
+    def _calculate_force_confidence(
+        self,
+        neckline_touches: int,
+        trendline_slope: float,
+        volume_decreasing: bool,
+        volume_spike: bool,
+        lead_in_trend: str,
+        consolidation_length: int
+    ) -> float:
+        """
+        Calculate confidence score for FORCE pattern
+
+        Returns:
+            Confidence score (0.0 - 1.0)
+        """
+        confidence = 0.5  # Base confidence
+
+        # More neckline touches = stronger resistance = higher confidence
+        confidence += min(neckline_touches * 0.08, 0.20)
+
+        # Positive slope on trendline = ascending triangle
+        if trendline_slope > 0:
+            confidence += min(trendline_slope * 100, 0.15)
+
+        # Volume decreasing during consolidation
+        if volume_decreasing:
+            confidence += 0.10
+
+        # Volume spike on breakout
+        if volume_spike:
+            confidence += 0.15
+
+        # Bullish lead-in is ideal for FORCE
+        if lead_in_trend == 'bullish':
+            confidence += 0.10
+        elif lead_in_trend == 'neutral':
+            confidence += 0.05
+
+        # Consolidation length (sweet spot: 15-40 candles for 4h timeframe)
+        if 15 <= consolidation_length <= 40:
+            confidence += 0.05
+
+        return min(confidence, 0.99)  # Cap at 99%
