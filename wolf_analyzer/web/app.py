@@ -433,8 +433,7 @@ def api_chart(symbol):
                 hline_styles.append('-')
                 hline_widths.append(2)
 
-        # Create chart without hlines first (mplfinance hlines are problematic)
-        # We'll draw lines manually on the axes instead
+        # Create chart
         fig, axes = mpf.plot(
             df,
             type='candle',
@@ -443,22 +442,159 @@ def api_chart(symbol):
             ylabel='Price (USDT)',
             volume=True,
             returnfig=True,
-            figsize=(12, 6),
+            figsize=(14, 8),
             tight_layout=True
         )
 
-        # Draw horizontal lines manually on the price axis (more reliable)
-        if hline_values:
-            ax = axes[0]  # Price axis
-            for i, y_val in enumerate(hline_values):
-                ax.axhline(
-                    y=y_val,
-                    color=hline_colors[i],
-                    linestyle=hline_styles[i],
-                    linewidth=hline_widths[i],
-                    alpha=0.7,
-                    zorder=3
+        ax_price = axes[0]  # Price axis
+
+        # Draw enhanced pattern visualization with trading zones
+        if patterns:
+            pattern = patterns[0]  # Use best pattern
+
+            # Get key trading levels
+            entry_price = pattern.entry_zone[0] if hasattr(pattern, 'entry_zone') and len(pattern.entry_zone) > 0 else None
+            stop_loss = pattern.stop_loss if hasattr(pattern, 'stop_loss') else None
+            target = pattern.targets[0] if hasattr(pattern, 'targets') and len(pattern.targets) > 0 else None
+
+            # === RISK ZONE (Entry to Stop Loss) - RED background ===
+            if entry_price and stop_loss:
+                ax_price.axhspan(
+                    min(entry_price, stop_loss),
+                    max(entry_price, stop_loss),
+                    alpha=0.15,
+                    color='#EF5350',
+                    zorder=1,
+                    label='Risk Zone'
                 )
+                # Stop loss line (thick red)
+                ax_price.axhline(
+                    y=stop_loss,
+                    color='#EF5350',
+                    linestyle='-',
+                    linewidth=3,
+                    alpha=0.9,
+                    zorder=4,
+                    label=f'SL: ${stop_loss:.2f}'
+                )
+
+            # === PROFIT ZONE (Entry to Target) - GREEN background ===
+            if entry_price and target:
+                ax_price.axhspan(
+                    min(entry_price, target),
+                    max(entry_price, target),
+                    alpha=0.12,
+                    color='#66BB6A',
+                    zorder=1,
+                    label='Target Zone'
+                )
+                # Target line (thick green)
+                ax_price.axhline(
+                    y=target,
+                    color='#66BB6A',
+                    linestyle='-',
+                    linewidth=3,
+                    alpha=0.9,
+                    zorder=4,
+                    label=f'TP: ${target:.2f}'
+                )
+
+            # === ENTRY LINE (orange dashed) ===
+            if entry_price:
+                ax_price.axhline(
+                    y=entry_price,
+                    color='#FFA726',
+                    linestyle='--',
+                    linewidth=2.5,
+                    alpha=0.9,
+                    zorder=4,
+                    label=f'Entry: ${entry_price:.2f}'
+                )
+
+            # === PATTERN-SPECIFIC TRENDLINES ===
+            if hasattr(pattern, 'key_levels') and pattern.key_levels:
+                n_candles = len(df)
+
+                # Ascending Triangle: flat resistance + rising support
+                if pattern.pattern_type == 'Ascending Triangle':
+                    resistance = pattern.key_levels.get('resistance')
+                    support_start = pattern.key_levels.get('support_start')
+                    support_end = pattern.key_levels.get('support_end')
+
+                    if resistance:
+                        ax_price.axhline(y=resistance, color='#EF5350', linestyle='--', linewidth=2, alpha=0.7)
+                    if support_start and support_end:
+                        x_start, x_end = int(n_candles * 0.5), n_candles - 1
+                        ax_price.plot([x_start, x_end], [support_start, support_end],
+                                    color='#26a69a', linestyle='--', linewidth=2, alpha=0.7)
+
+                # Descending Triangle: flat support + falling resistance
+                elif pattern.pattern_type == 'Descending Triangle':
+                    support = pattern.key_levels.get('support')
+                    resistance_start = pattern.key_levels.get('resistance_start')
+                    resistance_end = pattern.key_levels.get('resistance_end')
+
+                    if support:
+                        ax_price.axhline(y=support, color='#26a69a', linestyle='--', linewidth=2, alpha=0.7)
+                    if resistance_start and resistance_end:
+                        x_start, x_end = int(n_candles * 0.5), n_candles - 1
+                        ax_price.plot([x_start, x_end], [resistance_start, resistance_end],
+                                    color='#EF5350', linestyle='--', linewidth=2, alpha=0.7)
+
+                # Falling Wedge: converging downtrend lines (bullish)
+                elif pattern.pattern_type == 'Falling Wedge':
+                    upper_start = pattern.key_levels.get('upper_start')
+                    upper_end = pattern.key_levels.get('upper_end')
+                    lower_start = pattern.key_levels.get('lower_start')
+                    lower_end = pattern.key_levels.get('lower_end')
+
+                    if all([upper_start, upper_end, lower_start, lower_end]):
+                        x_start, x_end = int(n_candles * 0.4), n_candles - 1
+                        ax_price.plot([x_start, x_end], [upper_start, upper_end],
+                                    color='#EF5350', linestyle='--', linewidth=2, alpha=0.7)
+                        ax_price.plot([x_start, x_end], [lower_start, lower_end],
+                                    color='#26a69a', linestyle='--', linewidth=2, alpha=0.7)
+
+                # Rising Wedge: converging uptrend lines (bearish)
+                elif pattern.pattern_type == 'Rising Wedge':
+                    upper_start = pattern.key_levels.get('upper_start')
+                    upper_end = pattern.key_levels.get('upper_end')
+                    lower_start = pattern.key_levels.get('lower_start')
+                    lower_end = pattern.key_levels.get('lower_end')
+
+                    if all([upper_start, upper_end, lower_start, lower_end]):
+                        x_start, x_end = int(n_candles * 0.4), n_candles - 1
+                        ax_price.plot([x_start, x_end], [upper_start, upper_end],
+                                    color='#EF5350', linestyle='--', linewidth=2, alpha=0.7)
+                        ax_price.plot([x_start, x_end], [lower_start, lower_end],
+                                    color='#26a69a', linestyle='--', linewidth=2, alpha=0.7)
+
+            # === PATTERN INFO BOX ===
+            pattern_text = f"{pattern.pattern_type}\nConfidence: {pattern.confidence:.0%}"
+            if hasattr(pattern, 'risk_reward'):
+                pattern_text += f"\nR:R {pattern.risk_reward:.2f}:1"
+
+            ax_price.text(
+                0.02, 0.98, pattern_text,
+                transform=ax_price.transAxes,
+                fontsize=11,
+                verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='#1a1a2e', alpha=0.9, edgecolor='#FFA726', linewidth=2),
+                color='#FFA726',
+                weight='bold'
+            )
+
+            # Add legend
+            ax_price.legend(loc='upper right', fontsize=9, framealpha=0.9)
+
+        else:
+            # No patterns - draw basic support/resistance
+            for sup_level in support[:3]:
+                ax_price.axhline(y=float(sup_level), color='#26a69a', linestyle='--',
+                               linewidth=1.5, alpha=0.6)
+            for res_level in resistance[:3]:
+                ax_price.axhline(y=float(res_level), color='#ef5350', linestyle='--',
+                               linewidth=1.5, alpha=0.6)
 
         # Save to bytes buffer
         buf = io.BytesIO()

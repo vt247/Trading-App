@@ -129,6 +129,10 @@ class PatternRecognition:
             risk_reward = reward / risk if risk > 0 else 0
 
             if risk_reward >= 2.0:  # Minimum 2:1 R:R
+                # Calculate trendline points for rising support
+                support_start = support_lows.iloc[0]
+                support_end = support_lows.iloc[-1]
+
                 pattern = Pattern(
                     pattern_type="Ascending Triangle",
                     confidence=confidence,
@@ -141,6 +145,8 @@ class PatternRecognition:
                     key_levels={
                         'resistance': resistance_level,
                         'support': support_lows.min(),
+                        'support_start': support_start,
+                        'support_end': support_end,
                         'current_price': current_price
                     },
                     volume_confirmation=self._is_volume_decreasing(recent),
@@ -202,6 +208,10 @@ class PatternRecognition:
             risk_reward = reward / risk if risk > 0 else 0
 
             if risk_reward >= 2.0:
+                # Calculate trendline points for falling resistance
+                resistance_start = resistance_highs.iloc[0]
+                resistance_end = resistance_highs.iloc[-1]
+
                 pattern = Pattern(
                     pattern_type="Descending Triangle",
                     confidence=confidence,
@@ -214,6 +224,8 @@ class PatternRecognition:
                     key_levels={
                         'support': support_level,
                         'resistance': resistance_highs.max(),
+                        'resistance_start': resistance_start,
+                        'resistance_end': resistance_end,
                         'current_price': current_price
                     },
                     volume_confirmation=self._is_volume_decreasing(recent),
