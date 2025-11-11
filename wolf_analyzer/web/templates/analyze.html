@@ -504,7 +504,11 @@ function renderPatternCard(pattern, index, isCurrent) {
     return `
         <div class="pattern-detail" id="${patternId}" ${!isCurrent ? 'style="transition: all 0.2s; border: 2px solid transparent;" onmouseover="this.style.borderColor=\'var(--primary)\'" onmouseout="this.style.borderColor=\'transparent\'"' : ''}>
             <div class="pattern-header">
-                <h3 class="card-title">${patternEmoji} ${pattern.pattern_type} Pattern ${!isCurrent ? `<span style="font-size: 0.8rem; color: var(--text-muted);">(${detectedDate})</span>` : ''}</h3>
+                <h3 class="card-title">
+                    ${patternEmoji} ${pattern.pattern_type} Pattern
+                    <span style="background: var(--primary); color: var(--bg); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem; margin-left: 0.5rem;">${pattern.timeframe?.toUpperCase() || '4H'}</span>
+                    ${!isCurrent ? `<span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem;">(${detectedDate})</span>` : ''}
+                </h3>
                 <span class="confidence-badge">${(pattern.confidence * 100).toFixed(0)}% Confidence</span>
             </div>
 
@@ -580,8 +584,15 @@ function zoomToPattern(pattern) {
     // Zoom to pattern (show ±50 candles around breakout)
     const timeScale = chart.timeScale();
 
-    // Calculate time window (assuming 4h candles = 14400 seconds)
-    const candleDuration = 4 * 60 * 60; // 4 hours in seconds
+    // Get candle duration based on pattern's timeframe
+    const timeframeToDuration = {
+        '1h': 60 * 60,
+        '4h': 4 * 60 * 60,
+        '1d': 24 * 60 * 60,
+        '1w': 7 * 24 * 60 * 60
+    };
+    const candleDuration = timeframeToDuration[pattern.timeframe] || (4 * 60 * 60);
+
     const fromTime = breakoutTime - (50 * candleDuration);
     const toTime = breakoutTime + (20 * candleDuration);
 

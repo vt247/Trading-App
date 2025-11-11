@@ -377,16 +377,46 @@ def api_analyze(symbol):
         rsi = indicators.calculate_rsi(df)
         macd, signal_line, histogram = indicators.calculate_macd(df)
 
-        # FOOS Pattern Detection
-        foos_patterns = foos_detector.detect_patterns(df, symbol)
+        # FOOS Pattern Detection - Scan multiple timeframes
+        log_activity(f"Scanning multiple timeframes for {symbol}...")
+        all_patterns = []
+        timeframes_to_scan = ['1h', '4h', '1d', '1w']
+
+        for tf in timeframes_to_scan:
+            try:
+                # Fetch data for this timeframe
+                if historical_manager and tf != timeframe:  # Use already loaded df for current timeframe
+                    tf_end_time = datetime.now()
+                    tf_start_time = tf_end_time - timedelta(days=30)
+                    tf_df = historical_manager.db.get_ohlcv(symbol, tf, tf_start_time, tf_end_time)
+                    if tf_df.empty:
+                        tf_df = market_data.get_ohlcv(symbol, timeframe=tf, limit=500)
+                elif tf == timeframe:
+                    tf_df = df  # Use already loaded data
+                else:
+                    tf_df = market_data.get_ohlcv(symbol, timeframe=tf, limit=500)
+
+                if not tf_df.empty:
+                    tf_patterns = foos_detector.detect_patterns(tf_df, symbol)
+                    # Store pattern with its timeframe and df length
+                    for pattern in tf_patterns:
+                        all_patterns.append((pattern, tf, len(tf_df)))
+                    log_activity(f"  {tf.upper()}: Found {len(tf_patterns)} pattern(s)")
+
+            except Exception as e:
+                log_activity(f"  {tf.upper()}: Error - {str(e)}", level='ERROR')
+                continue
+
+        log_activity(f"Total patterns found across all timeframes: {len(all_patterns)}")
 
         # Categorize patterns: current (last 20 candles) vs historical
         current_patterns = []
         historical_patterns = []
 
-        for pattern in foos_patterns:
+        for pattern, pattern_timeframe, df_length in all_patterns:
             pattern_data = {
                 'pattern_type': str(pattern.pattern_type),
+                'timeframe': pattern_timeframe,  # Add timeframe info
                 'confidence': safe_float(pattern.confidence),
                 'detected_at': pattern.detected_at.isoformat(),
                 'breakout_timestamp': int(pattern.detected_at.timestamp()),  # For chart zooming
@@ -420,10 +450,13 @@ def api_analyze(symbol):
             }
 
             # Current pattern if breakout happened in last 20 candles
-            if pattern.phase_3_breakout >= len(df) - 20:
+            if pattern.phase_3_breakout >= df_length - 20:
                 current_patterns.append(pattern_data)
             else:
                 historical_patterns.append(pattern_data)
+
+        # Sort historical patterns by date (newest first)
+        historical_patterns.sort(key=lambda x: x['breakout_timestamp'], reverse=True)
 
         return jsonify({
             'success': True,
