@@ -64,6 +64,11 @@ class HistoricalDataManager:
                 duration_minutes = (end - start).total_seconds() / 60
                 candles_needed = int(duration_minutes / timeframe_minutes)
 
+                # Skip if period is too small (less than 1 candle)
+                if candles_needed < 1:
+                    print(f"    ⏭️  Skipping: period too small (< 1 candle)")
+                    continue
+
                 # Binance limit is 1000 candles per request
                 batch_size = 1000
                 current_start = start
@@ -72,11 +77,14 @@ class HistoricalDataManager:
                     # Fetch batch
                     since_ms = int(current_start.timestamp() * 1000)
 
+                    # Ensure limit is at least 1
+                    fetch_limit = max(1, min(batch_size, candles_needed))
+
                     try:
                         df_batch = self.market.get_ohlcv(
                             symbol=symbol,
                             timeframe=timeframe,
-                            limit=min(batch_size, candles_needed),
+                            limit=fetch_limit,
                             since=since_ms
                         )
 
