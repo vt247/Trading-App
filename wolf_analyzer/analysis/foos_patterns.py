@@ -83,8 +83,10 @@ class FOOSPatternDetector:
         patterns = []
 
         if len(df) < 100:
-            print(f"⚠️  Need at least 100 candles for pattern detection (got {len(df)})")
+            print(f"⚠️  {symbol}: Need at least 100 candles for pattern detection (got {len(df)})")
             return patterns
+
+        print(f"🔍 Scanning {symbol} for FOOS patterns ({len(df)} candles)...")
 
         # Detect FORCE patterns
         force_patterns = self._detect_force(df)
@@ -95,6 +97,12 @@ class FOOSPatternDetector:
         # patterns.extend(self._detect_revival(df))
         # patterns.extend(self._detect_gold(df))
 
+        # Show all patterns before filtering
+        if force_patterns:
+            print(f"  Found {len(force_patterns)} FORCE candidate(s) before confidence filter")
+            for p in force_patterns:
+                print(f"    - {p.pattern_type}: {p.confidence:.1%} confidence (threshold: {self.min_confidence:.1%})")
+
         # Filter by confidence
         patterns = [p for p in patterns if p.confidence >= self.min_confidence]
 
@@ -102,9 +110,9 @@ class FOOSPatternDetector:
         patterns.sort(key=lambda x: x.confidence, reverse=True)
 
         if patterns:
-            print(f"✓ Detected {len(patterns)} FOOS pattern(s) for {symbol}")
+            print(f"✓ {symbol}: Detected {len(patterns)} high-confidence FOOS pattern(s)")
         else:
-            print(f"  No FOOS patterns detected for {symbol}")
+            print(f"  {symbol}: No patterns above {self.min_confidence:.0%} confidence threshold")
 
         return patterns
 
@@ -136,10 +144,20 @@ class FOOSPatternDetector:
         # Calculate indicators
         ema_13 = self.indicators.calculate_ema_13(df)
 
+        # Debug counters
+        checked = 0
+        failed_lead_in = 0
+        failed_neckline = 0
+        failed_trendline = 0
+        failed_convergence = 0
+        failed_breakout = 0
+        failed_risk_reward = 0
+
         # Scan through data looking for potential patterns
         # Start from index 50 to have enough history for lead-in trend
         # End 20 candles before current to see if breakout confirmed
         for i in range(50, len(df) - 20):
+            checked += 1
             # Look at a window of 30-50 candles for consolidation
             window_start = i
             window_end = min(i + 50, len(df) - 10)
@@ -154,33 +172,39 @@ class FOOSPatternDetector:
 
             # FORCE requires bullish or neutral lead-in
             if lead_in_trend not in ['bullish', 'neutral']:
+                failed_lead_in += 1
                 continue
 
             # Step 2: Identify potential neckline (resistance)
             neckline_result = self._find_neckline(window)
             if not neckline_result:
+                failed_neckline += 1
                 continue
 
             neckline_price, neckline_touches, neckline_indices = neckline_result
 
             # Need at least 2 touches to confirm neckline
             if neckline_touches < 2:
+                failed_neckline += 1
                 continue
 
             # Step 3: Identify ascending trendline (support)
             trendline_result = self._find_ascending_trendline(window)
             if not trendline_result:
+                failed_trendline += 1
                 continue
 
             trendline_slope, trendline_indices = trendline_result
 
             # Slope must be positive (ascending)
             if trendline_slope <= 0:
+                failed_trendline += 1
                 continue
 
             # Step 4: Check for triangle convergence
             # Lines should be getting closer (consolidation narrowing)
             if not self._check_triangle_convergence(window, neckline_price, trendline_indices):
+                failed_convergence += 1
                 continue
 
             # Step 5: Check volume pattern (decreasing during consolidation)
@@ -192,6 +216,7 @@ class FOOSPatternDetector:
             )
 
             if not breakout_result:
+                failed_breakout += 1
                 continue
 
             breakout_idx, breakout_confirmed, volume_spike = breakout_result
@@ -228,6 +253,7 @@ class FOOSPatternDetector:
 
             # Only consider if R:R >= 2:1
             if risk_reward < 2.0:
+                failed_risk_reward += 1
                 continue
 
             # Check EMA 13 position
@@ -268,6 +294,22 @@ class FOOSPatternDetector:
 
             # Skip ahead to avoid overlapping patterns
             i = breakout_idx + 10
+
+        # Print debug summary
+        if checked > 0:
+            print(f"    FORCE scan summary ({checked} windows checked):")
+            if failed_lead_in > 0:
+                print(f"      - {failed_lead_in} failed: bearish lead-in trend (need bullish/neutral)")
+            if failed_neckline > 0:
+                print(f"      - {failed_neckline} failed: no clear neckline resistance")
+            if failed_trendline > 0:
+                print(f"      - {failed_trendline} failed: no ascending support trendline")
+            if failed_convergence > 0:
+                print(f"      - {failed_convergence} failed: triangle not converging")
+            if failed_breakout > 0:
+                print(f"      - {failed_breakout} failed: no breakout above neckline")
+            if failed_risk_reward > 0:
+                print(f"      - {failed_risk_reward} failed: risk/reward < 2:1")
 
         return patterns
 
