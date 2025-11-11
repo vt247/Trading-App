@@ -88,24 +88,34 @@ class HistoricalDataManager:
                             last_timestamp = df_batch.index[-1]
                             current_start = last_timestamp + timedelta(minutes=timeframe_minutes)
 
-                            print(f"    Fetched up to {last_timestamp.date()}")
+                            print(f"    ✓ Fetched {len(df_batch)} candles up to {last_timestamp.date()}")
                         else:
-                            print(f"    No more data available")
+                            print(f"    ⚠️  No more data available from API")
                             break
 
                         # Rate limiting (1.2s between requests)
                         time.sleep(1.2)
 
                     except Exception as e:
-                        print(f"    Error fetching batch: {e}")
-                        break
+                        print(f"    ❌ Error fetching batch: {type(e).__name__}: {str(e)}")
+                        # Continue trying if it's a transient error, break if it's likely persistent
+                        if "rate limit" in str(e).lower() or "429" in str(e):
+                            print(f"    ⏸️  Rate limited, waiting 60s before retry...")
+                            time.sleep(60)
+                            # Don't break, try again
+                        else:
+                            break
 
         # Return complete dataset from database
         end_time = datetime.now()
         start_time = end_time - timedelta(days=lookback_days)
         df = self.db.get_ohlcv(symbol, timeframe, start_time, end_time)
 
-        print(f"\n✓ Complete dataset: {len(df)} candles from {df.index[0].date()} to {df.index[-1].date()}")
+        if not df.empty:
+            print(f"\n✓ Complete dataset: {len(df)} candles from {df.index[0].date()} to {df.index[-1].date()}")
+        else:
+            print(f"\n⚠️  Warning: No data available for {symbol} - API may be unavailable or rate limited")
+
         return df
 
     def update_latest(self, symbol: str, timeframe: str = '4h') -> pd.DataFrame:

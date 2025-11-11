@@ -288,21 +288,60 @@ def api_analyze(symbol):
         if not foos_detector:
             raise Exception("FOOSPatternDetector not initialized")
 
-        # Fetch more data for better pattern detection (500+ candles recommended)
-        df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=500)
+        # Try to get data from historical database first (more reliable)
+        df = None
+        errors = []
 
-        if df.empty:
+        if historical_manager:
+            try:
+                log_activity(f"Attempting to fetch historical data for {symbol}...")
+                # Ensure we have recent data (last 30 days is enough for analysis)
+                historical_manager.ensure_data(symbol, timeframe, lookback_days=30)
+                # Get last 500 candles from database
+                df = historical_manager.db.get_ohlcv(symbol, timeframe, lookback_days=30)
+                if not df.empty:
+                    df = df.tail(500)  # Use last 500 candles
+                    log_activity(f"✓ Using historical data for {symbol} ({len(df)} candles)")
+                else:
+                    msg = "Historical database is empty (first run or no data stored)"
+                    log_activity(msg, level='WARNING')
+                    errors.append(msg)
+            except Exception as e:
+                msg = f"Historical data error: {type(e).__name__}: {str(e)}"
+                log_activity(msg, level='WARNING')
+                errors.append(msg)
+
+        # Fallback to live API if historical data unavailable
+        if df is None or df.empty:
+            try:
+                log_activity(f"Attempting live API fetch for {symbol}...")
+                df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=500)
+                if not df.empty:
+                    log_activity(f"✓ Using live API data for {symbol} ({len(df)} candles)")
+                else:
+                    msg = "Live API returned empty data"
+                    log_activity(msg, level='ERROR')
+                    errors.append(msg)
+            except Exception as e:
+                msg = f"Live API error: {type(e).__name__}: {str(e)}"
+                log_activity(msg, level='ERROR')
+                errors.append(msg)
+
+        if df is None or df.empty:
             has_api_keys = bool(Config.BINANCE_API_KEY and Config.BINANCE_API_SECRET)
-            error_msg = 'No data available for this symbol. '
+            error_msg = f'No data available for {symbol}. '
             if not has_api_keys:
                 error_msg += 'Binance API keys are not configured in Render environment variables.'
             else:
-                error_msg += 'Check Render logs for detailed error information.'
+                error_msg += 'Errors encountered: ' + ' | '.join(errors) if errors else 'Unknown error.'
+
+            log_activity(f"Failed to fetch data for {symbol}: {error_msg}", level='ERROR')
 
             return jsonify({
                 'success': False,
                 'error': error_msg,
-                'has_api_keys': has_api_keys
+                'has_api_keys': has_api_keys,
+                'errors': errors
             }), 404
 
         # Current price info
