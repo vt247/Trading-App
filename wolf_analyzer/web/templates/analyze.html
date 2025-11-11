@@ -485,10 +485,11 @@ function displayPatterns(currentPatterns, historicalPatterns) {
             const card = document.getElementById(`pattern-historical-${index}`);
             if (card) {
                 card.style.cursor = 'pointer';
-                card.addEventListener('click', (event) => {
+                card.addEventListener('click', async (event) => {
+                    console.log('Pattern clicked:', pattern);
                     // Store pattern ID for highlighting
                     pattern._cardElement = event.currentTarget;
-                    zoomToPattern(pattern);
+                    await zoomToPattern(pattern);
                 });
             }
         });
@@ -581,10 +582,16 @@ function renderPatternCard(pattern, index, isCurrent) {
 
 // Function to zoom chart to a specific pattern
 async function zoomToPattern(pattern) {
+    console.log('zoomToPattern called with:', pattern);
+
     if (!pattern || !pattern.breakout_timestamp || !pattern.timeframe) {
         console.error('Invalid pattern data:', pattern);
+        alert('Error: Pattern data is missing required fields');
         return;
     }
+
+    console.log('Current chart timeframe:', currentChartTimeframe);
+    console.log('Pattern timeframe:', pattern.timeframe);
 
     // Check if we need to reload chart with different timeframe
     if (currentChartTimeframe !== pattern.timeframe) {
@@ -594,18 +601,27 @@ async function zoomToPattern(pattern) {
         document.getElementById('timeframe-select').value = pattern.timeframe;
 
         // Reload chart with pattern's timeframe
-        await loadChart(pattern.timeframe);
+        try {
+            await loadChart(pattern.timeframe);
+            console.log('Chart reloaded successfully');
+        } catch (error) {
+            console.error('Error reloading chart:', error);
+            alert('Error reloading chart: ' + error.message);
+            return;
+        }
 
         // Wait for chart to render
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     if (!chart) {
-        console.error('Chart not initialized');
+        console.error('Chart not initialized after reload');
+        alert('Error: Chart is not initialized');
         return;
     }
 
     const breakoutTime = pattern.breakout_timestamp;
+    console.log('Breakout timestamp:', breakoutTime);
 
     // Scroll to chart
     document.getElementById('chart-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -625,11 +641,18 @@ async function zoomToPattern(pattern) {
     const fromTime = breakoutTime - (50 * candleDuration);
     const toTime = breakoutTime + (20 * candleDuration);
 
+    console.log('Setting visible range:', { from: fromTime, to: toTime });
+
     // Set visible time range
-    timeScale.setVisibleRange({
-        from: fromTime,
-        to: toTime
-    });
+    try {
+        timeScale.setVisibleRange({
+            from: fromTime,
+            to: toTime
+        });
+        console.log('Chart zoomed successfully');
+    } catch (error) {
+        console.error('Error setting visible range:', error);
+    }
 
     // Highlight the pattern card temporarily
     const allPatterns = document.querySelectorAll('.pattern-detail');
