@@ -15,6 +15,7 @@ import base64
 import logging
 from logging.handlers import RotatingFileHandler
 import pandas as pd
+import math
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for Render
 import matplotlib.pyplot as plt
@@ -70,6 +71,18 @@ CORS(app)
 # Debug system - store last 50 errors and 200 general logs
 error_log = deque(maxlen=50)
 activity_log = deque(maxlen=200)
+
+def safe_float(value):
+    """Convert value to float, returning None if NaN or None"""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return None if math.isnan(value) or math.isinf(value) else float(value)
+    try:
+        f = float(value)
+        return None if math.isnan(f) or math.isinf(f) else f
+    except (ValueError, TypeError):
+        return None
 
 def log_activity(message, level='INFO'):
     """Log general activity"""
@@ -370,19 +383,21 @@ def api_analyze(symbol):
         patterns_data = []
         for pattern in foos_patterns:
             patterns_data.append({
-                'type': str(pattern.pattern_type),
-                'confidence': float(pattern.confidence),
+                'pattern_type': str(pattern.pattern_type),
+                'confidence': safe_float(pattern.confidence),
                 'detected_at': pattern.detected_at.isoformat(),
                 'phase_1_start': int(pattern.phase_1_start),
                 'phase_2_start': int(pattern.phase_2_start),
                 'phase_3_breakout': int(pattern.phase_3_breakout),
-                'neckline_price': float(pattern.neckline_price),
+                'neckline_price': safe_float(pattern.neckline_price),
                 'neckline_touches': int(pattern.neckline_touches),
-                'entry_low': float(pattern.entry_low),
-                'entry_high': float(pattern.entry_high),
-                'stop_loss': float(pattern.stop_loss),
-                'targets': [float(pattern.target_1), float(pattern.target_2), float(pattern.target_3)],
-                'risk_reward': float(pattern.risk_reward),
+                'entry_low': safe_float(pattern.entry_low),
+                'entry_high': safe_float(pattern.entry_high),
+                'stop_loss': safe_float(pattern.stop_loss),
+                'target_1': safe_float(pattern.target_1),
+                'target_2': safe_float(pattern.target_2),
+                'target_3': safe_float(pattern.target_3),
+                'risk_reward': safe_float(pattern.risk_reward),
                 'lead_in_trend': str(pattern.lead_in_trend),
                 'consolidation_days': int(pattern.consolidation_days),
                 'volume_spike_confirmed': bool(pattern.volume_spike_confirmed),
@@ -394,7 +409,7 @@ def api_analyze(symbol):
                 'trendline_coords': {
                     'start_idx': int(pattern.trendline_start_idx),
                     'end_idx': int(pattern.trendline_end_idx),
-                    'slope': float(pattern.trendline_slope)
+                    'slope': safe_float(pattern.trendline_slope)
                 },
                 'description': str(pattern.description),
                 'notes': str(pattern.notes)
@@ -404,20 +419,20 @@ def api_analyze(symbol):
             'success': True,
             'symbol': symbol,
             'timeframe': timeframe,
-            'current_price': float(current_price),
-            'change_24h': float(change_24h),
+            'current_price': safe_float(current_price),
+            'change_24h': safe_float(change_24h),
             'foos_indicators': {
-                'ema_13': float(ema_13) if ema_13 else None,
-                'ma_50': float(ma_50) if ma_50 else None,
-                'ma_200': float(ma_200) if ma_200 else None,
-                'vwap': float(vwap) if vwap else None,
+                'ema_13': safe_float(ema_13),
+                'ma_50': safe_float(ma_50),
+                'ma_200': safe_float(ma_200),
+                'vwap': safe_float(vwap),
                 'price_position': price_position
             },
             'traditional_indicators': {
-                'rsi': float(rsi.iloc[-1]) if not rsi.empty else None,
-                'macd': float(macd.iloc[-1]) if not macd.empty else None,
-                'macd_signal': float(signal_line.iloc[-1]) if not signal_line.empty else None,
-                'macd_histogram': float(histogram.iloc[-1]) if not histogram.empty else None
+                'rsi': safe_float(rsi.iloc[-1]) if not rsi.empty else None,
+                'macd': safe_float(macd.iloc[-1]) if not macd.empty else None,
+                'macd_signal': safe_float(signal_line.iloc[-1]) if not signal_line.empty else None,
+                'macd_histogram': safe_float(histogram.iloc[-1]) if not histogram.empty else None
             },
             'patterns': patterns_data,
             'timestamp': datetime.now().isoformat()
@@ -697,32 +712,39 @@ def api_chart_data(symbol):
             row = df.iloc[idx]
             timestamp = int(df.index[idx].timestamp())  # Unix timestamp in seconds
 
+            # Skip rows with invalid OHLCV data
+            if any(pd.isna([row['open'], row['high'], row['low'], row['close'], row['volume']])):
+                continue
+
             candlestick_data.append({
                 'time': timestamp,
-                'open': float(row['open']),
-                'high': float(row['high']),
-                'low': float(row['low']),
-                'close': float(row['close']),
-                'volume': float(row['volume'])
+                'open': safe_float(row['open']),
+                'high': safe_float(row['high']),
+                'low': safe_float(row['low']),
+                'close': safe_float(row['close']),
+                'volume': safe_float(row['volume'])
             })
 
             # Add indicators (skip NaN values)
-            if not pd.isna(ema_13.iloc[idx]):
+            ema_val = safe_float(ema_13.iloc[idx])
+            if ema_val is not None:
                 ema13_data.append({
                     'time': timestamp,
-                    'value': float(ema_13.iloc[idx])
+                    'value': ema_val
                 })
 
-            if not pd.isna(ma_50.iloc[idx]):
+            ma50_val = safe_float(ma_50.iloc[idx])
+            if ma50_val is not None:
                 ma50_data.append({
                     'time': timestamp,
-                    'value': float(ma_50.iloc[idx])
+                    'value': ma50_val
                 })
 
-            if not pd.isna(ma_200.iloc[idx]):
+            ma200_val = safe_float(ma_200.iloc[idx])
+            if ma200_val is not None:
                 ma200_data.append({
                     'time': timestamp,
-                    'value': float(ma_200.iloc[idx])
+                    'value': ma200_val
                 })
 
         # Format patterns for drawing
@@ -735,33 +757,33 @@ def api_chart_data(symbol):
             trendline_end_ts = int(df.index[pattern.trendline_end_idx].timestamp())
 
             # Calculate trendline prices
-            trendline_start_price = float(df.iloc[pattern.trendline_start_idx]['low'])
-            trendline_end_price = trendline_start_price + (pattern.trendline_slope * (pattern.trendline_end_idx - pattern.trendline_start_idx))
+            trendline_start_price = safe_float(df.iloc[pattern.trendline_start_idx]['low'])
+            trendline_end_price = safe_float(trendline_start_price + (pattern.trendline_slope * (pattern.trendline_end_idx - pattern.trendline_start_idx)))
 
             patterns_data.append({
                 'type': str(pattern.pattern_type),
-                'confidence': float(pattern.confidence),
+                'confidence': safe_float(pattern.confidence),
                 'neckline': {
                     'start_time': neckline_start_ts,
                     'end_time': neckline_end_ts,
-                    'price': float(pattern.neckline_price)
+                    'price': safe_float(pattern.neckline_price)
                 },
                 'trendline': {
                     'start_time': trendline_start_ts,
                     'end_time': trendline_end_ts,
                     'start_price': trendline_start_price,
-                    'end_price': float(trendline_end_price)
+                    'end_price': trendline_end_price
                 },
-                'entry_high': float(pattern.entry_high),
-                'entry_low': float(pattern.entry_low),
-                'stop_loss': float(pattern.stop_loss),
-                'target_1': float(pattern.target_1),
-                'target_2': float(pattern.target_2),
-                'target_3': float(pattern.target_3),
+                'entry_high': safe_float(pattern.entry_high),
+                'entry_low': safe_float(pattern.entry_low),
+                'stop_loss': safe_float(pattern.stop_loss),
+                'target_1': safe_float(pattern.target_1),
+                'target_2': safe_float(pattern.target_2),
+                'target_3': safe_float(pattern.target_3),
                 'description': str(pattern.description),
                 'lead_in_trend': str(pattern.lead_in_trend),
                 'consolidation_days': int(pattern.consolidation_days),
-                'risk_reward': float(pattern.risk_reward)
+                'risk_reward': safe_float(pattern.risk_reward)
             })
 
         return jsonify({
