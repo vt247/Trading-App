@@ -24,7 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from wolf_analyzer.core.config import Config
 from wolf_analyzer.data.market_data import MarketDataConnector
+from wolf_analyzer.data.historical_manager import HistoricalDataManager
 from wolf_analyzer.analysis.pattern_recognition import PatternRecognition
+from wolf_analyzer.analysis.foos_patterns import FOOSPatternDetector
 from wolf_analyzer.analysis.technical_indicators import TechnicalIndicators
 from wolf_analyzer.ai.claude_analyzer import ClaudeAnalyzer
 
@@ -118,10 +120,24 @@ except Exception as e:
     market_data = None
 
 try:
+    historical_manager = HistoricalDataManager(market_data)
+    logger.info("✓ Historical Data Manager initialized")
+except Exception as e:
+    log_error(e, "HistoricalDataManager init")
+    historical_manager = None
+
+try:
     pattern_recognition = PatternRecognition()
 except Exception as e:
     log_error(e, "PatternRecognition init")
     pattern_recognition = None
+
+try:
+    foos_detector = FOOSPatternDetector(min_confidence=0.65)
+    logger.info("✓ FOOS Pattern Detector initialized")
+except Exception as e:
+    log_error(e, "FOOSPatternDetector init")
+    foos_detector = None
 
 try:
     indicators = TechnicalIndicators()
@@ -259,27 +275,26 @@ def api_logs():
 
 @app.route('/api/analyze/<path:symbol>')
 def api_analyze(symbol):
-    """Analyze specific symbol"""
+    """Analyze specific symbol with FOOS methodology"""
     try:
         timeframe = request.args.get('timeframe', '4h')
-        log_activity(f"Analyzing {symbol} ({timeframe})")
+        log_activity(f"Analyzing {symbol} ({timeframe}) with FOOS")
 
         if not market_data:
             raise Exception("MarketDataConnector not initialized")
         if not indicators:
             raise Exception("TechnicalIndicators not initialized")
-        if not pattern_recognition:
-            raise Exception("PatternRecognition not initialized")
+        if not foos_detector:
+            raise Exception("FOOSPatternDetector not initialized")
 
-        # Fetch data
-        df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=200)
+        # Fetch more data for better pattern detection (500+ candles recommended)
+        df = market_data.get_ohlcv(symbol, timeframe=timeframe, limit=500)
 
         if df.empty:
-            # Check if API keys are configured
             has_api_keys = bool(Config.BINANCE_API_KEY and Config.BINANCE_API_SECRET)
             error_msg = 'No data available for this symbol. '
             if not has_api_keys:
-                error_msg += 'Binance API keys are not configured in Render environment variables. Please add BINANCE_API_KEY and BINANCE_API_SECRET to your service settings.'
+                error_msg += 'Binance API keys are not configured in Render environment variables.'
             else:
                 error_msg += 'Check Render logs for detailed error information.'
 
@@ -289,31 +304,58 @@ def api_analyze(symbol):
                 'has_api_keys': has_api_keys
             }), 404
 
-        # Get current price
+        # Current price info
         current_price = df['close'].iloc[-1]
         change_24h = ((df['close'].iloc[-1] / df['close'].iloc[-6] - 1) * 100) if len(df) >= 6 else 0
 
-        # Technical indicators
-        support, resistance = indicators.calculate_support_resistance(df)
+        # FOOS Indicators
+        foos_indicators = indicators.calculate_foos_indicators(df)
+        ema_13 = foos_indicators['ema_13'].iloc[-1] if not foos_indicators['ema_13'].empty else None
+        ma_50 = foos_indicators['ma_50'].iloc[-1] if not foos_indicators['ma_50'].empty else None
+        ma_200 = foos_indicators['ma_200'].iloc[-1] if not foos_indicators['ma_200'].empty else None
+        vwap = foos_indicators['vwap'].iloc[-1] if not foos_indicators['vwap'].empty else None
+
+        # Price position relative to indicators
+        price_position = indicators.get_price_position(df)
+
+        # Traditional indicators (keeping for compatibility)
         rsi = indicators.calculate_rsi(df)
         macd, signal_line, histogram = indicators.calculate_macd(df)
-        trend = indicators.identify_trend(df)
 
-        # Pattern recognition
-        patterns = pattern_recognition.analyze_chart(df, symbol)
+        # FOOS Pattern Detection
+        foos_patterns = foos_detector.detect_patterns(df, symbol)
 
         patterns_data = []
-        for pattern in patterns:
+        for pattern in foos_patterns:
             patterns_data.append({
                 'type': str(pattern.pattern_type),
                 'confidence': float(pattern.confidence),
-                'entry_zone': [float(x) for x in pattern.entry_zone],
+                'detected_at': pattern.detected_at.isoformat(),
+                'phase_1_start': int(pattern.phase_1_start),
+                'phase_2_start': int(pattern.phase_2_start),
+                'phase_3_breakout': int(pattern.phase_3_breakout),
+                'neckline_price': float(pattern.neckline_price),
+                'neckline_touches': int(pattern.neckline_touches),
+                'entry_low': float(pattern.entry_low),
+                'entry_high': float(pattern.entry_high),
                 'stop_loss': float(pattern.stop_loss),
-                'targets': [float(t) for t in pattern.targets],
+                'targets': [float(pattern.target_1), float(pattern.target_2), float(pattern.target_3)],
                 'risk_reward': float(pattern.risk_reward),
+                'lead_in_trend': str(pattern.lead_in_trend),
+                'consolidation_days': int(pattern.consolidation_days),
+                'volume_spike_confirmed': bool(pattern.volume_spike_confirmed),
+                'ema_13_position': str(pattern.ema_13_position),
+                'neckline_coords': {
+                    'start_idx': int(pattern.neckline_start_idx),
+                    'end_idx': int(pattern.neckline_end_idx)
+                },
+                'trendline_coords': {
+                    'start_idx': int(pattern.trendline_start_idx),
+                    'end_idx': int(pattern.trendline_end_idx),
+                    'slope': float(pattern.trendline_slope)
+                },
                 'description': str(pattern.description),
-                'volume_confirmation': bool(pattern.volume_confirmation),
-                'institutional_signal': bool(pattern.institutional_signal)
+                'notes': str(pattern.notes)
             })
 
         return jsonify({
@@ -322,14 +364,18 @@ def api_analyze(symbol):
             'timeframe': timeframe,
             'current_price': float(current_price),
             'change_24h': float(change_24h),
-            'indicators': {
-                'support': [float(s) for s in support],
-                'resistance': [float(r) for r in resistance],
-                'rsi': float(rsi.iloc[-1]),
-                'macd': float(macd.iloc[-1]),
-                'macd_signal': float(signal_line.iloc[-1]),
-                'macd_histogram': float(histogram.iloc[-1]),
-                'trend': trend
+            'foos_indicators': {
+                'ema_13': float(ema_13) if ema_13 else None,
+                'ma_50': float(ma_50) if ma_50 else None,
+                'ma_200': float(ma_200) if ma_200 else None,
+                'vwap': float(vwap) if vwap else None,
+                'price_position': price_position
+            },
+            'traditional_indicators': {
+                'rsi': float(rsi.iloc[-1]) if not rsi.empty else None,
+                'macd': float(macd.iloc[-1]) if not macd.empty else None,
+                'macd_signal': float(signal_line.iloc[-1]) if not signal_line.empty else None,
+                'macd_histogram': float(histogram.iloc[-1]) if not histogram.empty else None
             },
             'patterns': patterns_data,
             'timestamp': datetime.now().isoformat()
