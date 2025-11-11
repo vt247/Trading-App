@@ -155,7 +155,7 @@ class FOOSPatternDetector:
         logger.info(f"      📊 Scanning range: index 50 to {len(df) - 20} ({len(df) - 70} windows)")
 
         if self.relaxed_mode:
-            logger.info(f"      🔓 ULTRA RELAXED: neckline (2%) + ANY close above neckline in 50 candles, NO trendline required")
+            logger.info(f"      🔓 ULTRA RELAXED: neckline (2%) + flat/ascending trendline + breakout in 50 candles, NO R:R requirement")
 
         # Calculate indicators
         ema_13 = self.indicators.calculate_ema_13(df)
@@ -208,25 +208,22 @@ class FOOSPatternDetector:
                 failed_neckline += 1
                 continue
 
-            # Step 3: Identify ascending trendline (support) - SKIP in relaxed mode
-            if self.relaxed_mode:
-                # In ultra relaxed mode, skip trendline requirement entirely
-                trendline_slope = 0.0
-                trendline_indices = [0, len(window)-1]  # Dummy values
-            else:
-                trendline_result = self._find_ascending_trendline(window)
-                if not trendline_result:
-                    failed_trendline += 1
-                    continue
+            # Step 3: Identify ascending trendline (support)
+            trendline_result = self._find_ascending_trendline(window)
+            if not trendline_result:
+                failed_trendline += 1
+                continue
 
-                trendline_slope, trendline_indices = trendline_result
+            trendline_slope, trendline_indices = trendline_result
 
-                # Slope must be positive (ascending)
-                if trendline_slope <= 0:
-                    failed_trendline += 1
-                    continue
+            # Slope must be positive (ascending) - Relaxed: accept flat/slightly descending
+            min_slope = -0.0001 if self.relaxed_mode else 0
+            if trendline_slope <= min_slope:
+                failed_trendline += 1
+                continue
 
-                # Step 4: Check for triangle convergence
+            # Step 4: Check for triangle convergence (skip in relaxed mode)
+            if not self.relaxed_mode:
                 # Lines should be getting closer (consolidation narrowing)
                 if not self._check_triangle_convergence(window, neckline_price, trendline_indices):
                     failed_convergence += 1
@@ -276,11 +273,12 @@ class FOOSPatternDetector:
             reward = target_2 - entry_high
             risk_reward = reward / risk if risk > 0 else 0
 
-            # Only consider if R:R >= 2:1 (relaxed: 1.0:1)
-            min_risk_reward = 1.0 if self.relaxed_mode else 2.0
-            if risk_reward < min_risk_reward:
-                failed_risk_reward += 1
-                continue
+            # Only consider if R:R >= 2:1 (relaxed: NO requirement)
+            if not self.relaxed_mode:
+                min_risk_reward = 2.0
+                if risk_reward < min_risk_reward:
+                    failed_risk_reward += 1
+                    continue
 
             # Check EMA 13 position
             ema_13_val = ema_13.iloc[breakout_idx]
@@ -330,21 +328,21 @@ class FOOSPatternDetector:
             total_failed = failed_lead_in + failed_neckline + failed_trendline + failed_convergence + failed_breakout + failed_risk_reward
             logger.info(f"         Total failed: {total_failed}")
 
-            min_rr = "1.0:1" if self.relaxed_mode else "2:1"
             min_touches = "1+" if self.relaxed_mode else "2+"
+            trendline_desc = "flat/ascending" if self.relaxed_mode else "ascending"
 
             if failed_lead_in > 0:
                 logger.info(f"         ↳ {failed_lead_in} ({failed_lead_in/checked*100:.1f}%) failed: bearish lead-in trend")
             if failed_neckline > 0:
                 logger.info(f"         ↳ {failed_neckline} ({failed_neckline/checked*100:.1f}%) failed: no clear neckline resistance (need {min_touches} touches)")
-            if not self.relaxed_mode and failed_trendline > 0:
-                logger.info(f"         ↳ {failed_trendline} ({failed_trendline/checked*100:.1f}%) failed: no ascending support trendline")
+            if failed_trendline > 0:
+                logger.info(f"         ↳ {failed_trendline} ({failed_trendline/checked*100:.1f}%) failed: no {trendline_desc} support trendline")
             if not self.relaxed_mode and failed_convergence > 0:
                 logger.info(f"         ↳ {failed_convergence} ({failed_convergence/checked*100:.1f}%) failed: triangle not converging")
             if failed_breakout > 0:
                 logger.info(f"         ↳ {failed_breakout} ({failed_breakout/checked*100:.1f}%) failed: no breakout above neckline")
-            if failed_risk_reward > 0:
-                logger.info(f"         ↳ {failed_risk_reward} ({failed_risk_reward/checked*100:.1f}%) failed: risk/reward < {min_rr}")
+            if not self.relaxed_mode and failed_risk_reward > 0:
+                logger.info(f"         ↳ {failed_risk_reward} ({failed_risk_reward/checked*100:.1f}%) failed: risk/reward < 2:1")
         else:
             logger.warning(f"         ⚠️  No windows were checked!")
 
