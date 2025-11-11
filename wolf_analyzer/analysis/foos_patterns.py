@@ -155,7 +155,7 @@ class FOOSPatternDetector:
         logger.info(f"      📊 Scanning range: index 50 to {len(df) - 20} ({len(df) - 70} windows)")
 
         if self.relaxed_mode:
-            logger.info(f"      🔓 ULTRA RELAXED: neckline (2%) + flat/ascending trendline + breakout in 50 candles, NO R:R requirement")
+            logger.info(f"      🔓 RELAXED: neckline (2%) + flat/ascending trendline + breakout in 50 candles, R:R >= 1.5:1")
 
         # Calculate indicators
         ema_13 = self.indicators.calculate_ema_13(df)
@@ -273,12 +273,11 @@ class FOOSPatternDetector:
             reward = target_2 - entry_high
             risk_reward = reward / risk if risk > 0 else 0
 
-            # Only consider if R:R >= 2:1 (relaxed: NO requirement)
-            if not self.relaxed_mode:
-                min_risk_reward = 2.0
-                if risk_reward < min_risk_reward:
-                    failed_risk_reward += 1
-                    continue
+            # Only consider if R:R >= minimum (relaxed: 1.5:1, strict: 2:1)
+            min_risk_reward = 1.5 if self.relaxed_mode else 2.0
+            if risk_reward < min_risk_reward:
+                failed_risk_reward += 1
+                continue
 
             # Check EMA 13 position
             ema_13_val = ema_13.iloc[breakout_idx]
@@ -330,6 +329,7 @@ class FOOSPatternDetector:
 
             min_touches = "1+" if self.relaxed_mode else "2+"
             trendline_desc = "flat/ascending" if self.relaxed_mode else "ascending"
+            min_rr = "1.5:1" if self.relaxed_mode else "2:1"
 
             if failed_lead_in > 0:
                 logger.info(f"         ↳ {failed_lead_in} ({failed_lead_in/checked*100:.1f}%) failed: bearish lead-in trend")
@@ -341,8 +341,8 @@ class FOOSPatternDetector:
                 logger.info(f"         ↳ {failed_convergence} ({failed_convergence/checked*100:.1f}%) failed: triangle not converging")
             if failed_breakout > 0:
                 logger.info(f"         ↳ {failed_breakout} ({failed_breakout/checked*100:.1f}%) failed: no breakout above neckline")
-            if not self.relaxed_mode and failed_risk_reward > 0:
-                logger.info(f"         ↳ {failed_risk_reward} ({failed_risk_reward/checked*100:.1f}%) failed: risk/reward < 2:1")
+            if failed_risk_reward > 0:
+                logger.info(f"         ↳ {failed_risk_reward} ({failed_risk_reward/checked*100:.1f}%) failed: risk/reward < {min_rr}")
         else:
             logger.warning(f"         ⚠️  No windows were checked!")
 
